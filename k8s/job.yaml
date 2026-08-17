@@ -37,6 +37,9 @@ spec:
         # its dependencies, and Gatling's own runtime bundle baked in, so this container
         # does nothing but run it. No git clone, no npm install, no per-run bundle
         # download at all.
+        # Pinned to :latest (not a version tag) — v0.1.0 was tagged locally but the tag
+        # push is blocked pending an org-permissions fix (see README). Repoint to a
+        # specific version tag once that's sorted and a known-good release exists.
         - name: gatling
           image: ghcr.io/akamaslabs/akamas-gatling-llms-optimization:latest
           env:

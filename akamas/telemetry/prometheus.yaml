@@ -1,0 +1,121 @@
+kind: telemetry-instance
+system: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling
+
+name: Prometheus_1_Goodput_Realistic_Load_Gatling
+provider: Prometheus
+config:
+  address: kube-prometheus-stack-prometheus.monitoring.svc.cluster.local
+  port: 9090
+  logLevel: DETAILED
+  duration: 30
+
+metrics:
+
+  # --- Step 1 — Isolate the symptom: TTFT vs. ITL ---
+  - metric: e2e_request_latency_p95
+    datasourceMetric: '(histogram_quantile(0.95, sum by(le)(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))))*1000'
+    scale: 1
+  - metric: e2e_request_latency_avg
+    datasourceMetric: '(sum(rate(vllm:e2e_request_latency_seconds_sum{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])) / clamp_min(sum(rate(vllm:e2e_request_latency_seconds_count{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])), 1e-9))*1000'
+    scale: 1
+  - metric: request_success_rate
+    datasourceMetric: 'sum(rate(vllm:request_success_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))'
+  - metric: time_to_first_token_p95
+    datasourceMetric: '(histogram_quantile(0.95, sum by(le)(rate(vllm:time_to_first_token_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))))*1000'
+    scale: 1
+  - metric: time_to_first_token_avg
+    datasourceMetric: '(sum(rate(vllm:time_to_first_token_seconds_sum{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])) / clamp_min(sum(rate(vllm:time_to_first_token_seconds_count{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])), 1e-9))*1000'
+    scale: 1
+  - metric: prefill_token_throughput
+    datasourceMetric: 'sum(rate(vllm:prompt_tokens_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))'
+  - metric: inter_token_latency_p95
+    datasourceMetric: '(histogram_quantile(0.95, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))))*1000'
+    scale: 1
+  - metric: inter_token_latency_avg
+    datasourceMetric: '(sum(rate(vllm:inter_token_latency_seconds_sum{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])), 1e-9))*1000'
+    scale: 1
+  - metric: decode_token_throughput
+    datasourceMetric: 'sum(rate(vllm:generation_tokens_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))'
+
+  # --- Step 2 — Detect server saturation ---
+  - metric: num_requests_running
+    datasourceMetric: 'sum(vllm:num_requests_running{model_name=~"$MODEL$", pod=~"$POD$"})'
+  - metric: num_requests_waiting
+    datasourceMetric: 'sum(vllm:num_requests_waiting{model_name=~"$MODEL$", pod=~"$POD$"})'
+
+  # --- Step 3 — Evaluate VRAM and KV cache health ---
+  - metric: kv_cache_usage_avg
+    datasourceMetric: 'avg(vllm:kv_cache_usage_perc{model_name=~"$MODEL$", pod=~"$POD$"})'
+  - metric: kv_cache_usage_max
+    datasourceMetric: 'max(vllm:kv_cache_usage_perc{model_name=~"$MODEL$", pod=~"$POD$"})'
+  - metric: preemption_rate
+    datasourceMetric: 'sum(rate(vllm:num_preemptions_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$]))'
+  - metric: prefix_cache_hit_rate
+    datasourceMetric: 'sum(rate(vllm:prefix_cache_hits_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])) / clamp_min(sum(rate(vllm:prefix_cache_queries_total{model_name=~"$MODEL$", pod=~"$POD$"}[$DURATION$])), 1)'
+
+  # --- Step 4 — Analyze request sequence lengths ---
+  - metric: input_sequence_length_p95
+    datasourceMetric: 'histogram_quantile(0.95, sum by(le)(rate(vllm:request_prompt_tokens_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m])))'
+  - metric: input_sequence_length_avg
+    datasourceMetric: 'sum(rate(vllm:request_prompt_tokens_sum{model_name=~"$MODEL$", pod=~"$POD$"}[5m])) / clamp_min(sum(rate(vllm:request_prompt_tokens_count{model_name=~"$MODEL$", pod=~"$POD$"}[5m])), 1e-9)'
+  - metric: output_sequence_length_p95
+    datasourceMetric: 'histogram_quantile(0.95, sum by(le)(rate(vllm:request_generation_tokens_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m])))'
+  - metric: output_sequence_length_avg
+    datasourceMetric: 'sum(rate(vllm:request_generation_tokens_sum{model_name=~"$MODEL$", pod=~"$POD$"}[5m])) / clamp_min(sum(rate(vllm:request_generation_tokens_count{model_name=~"$MODEL$", pod=~"$POD$"}[5m])), 1e-9)'
+
+  # --- Step 5 — Review distributed inference strategy ---
+  - metric: fleet_e2e_latency_percentile
+    datasourceMetric: '(histogram_quantile(${percentile}, sum by(le)(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m]))))*1000'
+    scale: 1
+  - metric: fleet_inter_token_latency_percentile
+    datasourceMetric: '(histogram_quantile(${percentile}, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m]))))*1000'
+    scale: 1
+  - metric: fleet_request_success_rate
+    datasourceMetric: 'sum(rate(vllm:request_success_total{model_name=~"$MODEL$", pod=~"$POD$"}[5m]))'
+  - metric: fleet_kv_cache_usage_avg
+    datasourceMetric: 'avg(vllm:kv_cache_usage_perc{model_name=~"$MODEL$", pod=~"$POD$"})'
+  - metric: inter_token_latency_p95_5m
+    datasourceMetric: '(histogram_quantile(0.95, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m]))))*1000'
+    scale: 1
+  - metric: inter_token_latency_p95_max_per_pod
+    datasourceMetric: '(max(histogram_quantile(0.95, sum by(pod, le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m])))))*1000'
+    scale: 1
+  - metric: inter_token_latency_p95_min_per_pod
+    datasourceMetric: '(min(histogram_quantile(0.95, sum by(pod, le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~"$MODEL$", pod=~"$POD$"}[5m])))))*1000'
+    scale: 1
+
+  # --- GPU utilization (DCGM-exporter) ---
+  - metric: gpu_util
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_DEV_GPU_UTIL{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_sm_active
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_SM_ACTIVE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_sm_occupancy
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_SM_OCCUPANCY{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_tensor_core_active
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_dram_active
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_DRAM_ACTIVE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_fb_used
+    datasourceMetric: 'sum by(gpu)(DCGM_FI_DEV_FB_USED{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_fb_total
+    datasourceMetric: 'sum by(gpu)(DCGM_FI_DEV_FB_USED{pod=~"$POD$", gpu=~"$GPU$"} + DCGM_FI_DEV_FB_FREE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_power_usage
+    datasourceMetric: 'max by(gpu)(DCGM_FI_DEV_POWER_USAGE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_power_limit
+    datasourceMetric: 'max by(gpu)(DCGM_FI_DEV_POWER_MGMT_LIMIT{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_temp
+    datasourceMetric: 'max by(gpu)(DCGM_FI_DEV_GPU_TEMP{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_memory_temp
+    datasourceMetric: 'max by(gpu)(DCGM_FI_DEV_MEMORY_TEMP{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_power_violation_rate
+    datasourceMetric: 'sum by(gpu)(rate(DCGM_FI_DEV_POWER_VIOLATION{pod=~"$POD$", gpu=~"$GPU$"}[$DURATION$]))'
+  - metric: gpu_thermal_violation_rate
+    datasourceMetric: 'sum by(gpu)(rate(DCGM_FI_DEV_THERMAL_VIOLATION{pod=~"$POD$", gpu=~"$GPU$"}[$DURATION$]))'
+  - metric: gpu_pcie_replay_rate
+    datasourceMetric: 'sum by(gpu)(rate(DCGM_FI_DEV_PCIE_REPLAY_COUNTER{pod=~"$POD$", gpu=~"$GPU$"}[$DURATION$]))'
+
+  # --- Advanced: non-tensor pipe activity (FP16 / FP32) ---
+  - metric: gpu_fp16_pipe_active
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_PIPE_FP16_ACTIVE{pod=~"$POD$", gpu=~"$GPU$"})'
+  - metric: gpu_fp32_pipe_active
+    datasourceMetric: 'avg by(gpu)(DCGM_FI_PROF_PIPE_FP32_ACTIVE{pod=~"$POD$", gpu=~"$GPU$"})'

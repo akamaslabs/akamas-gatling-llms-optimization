@@ -1,0 +1,6 @@
+kind: component
+system: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling
+
+name: container
+description: Container component type
+componentType: Kubernetes Container

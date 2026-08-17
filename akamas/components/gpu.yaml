@@ -1,0 +1,10 @@
+kind: component
+system: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling
+
+name: gpu
+description: GPU component type
+componentType: GPU
+properties:
+  prometheus:
+    pod: .*
+    gpu: .*

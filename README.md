@@ -132,6 +132,67 @@ bash k8s/run_test_gatling.sh   # delete+apply, wait for completion, dump logs, e
 adjust to your own cluster's naming. To call this from an external orchestrator (e.g. as
 one step of a larger pipeline), point it at `k8s/run_test_gatling.sh`.
 
+**Image pinning.** `k8s/job.yaml` currently pulls `:latest` rather than a version tag.
+`v0.1.0` was tagged locally (2026-08-17) but pushing the tag is blocked by an
+`akamaslabs` org/repo write-permission issue (git push denied to the account in use) —
+once that's resolved, push the tag (`git push origin v0.1.0`) and repoint `k8s/job.yaml`
+at `ghcr.io/akamaslabs/akamas-gatling-llms-optimization:0.1.0`.
+
+## Akamas study (self-contained)
+
+2026-08-17 decision: the Akamas study definition and vLLM's own deployment config are
+copied into this repo (`akamas/`, plus `k8s/01-deployment_template.yaml`,
+`k8s/02-service.yaml`, `k8s/01-pvc-model-cache.yaml`, `k8s/03-hf-secret.yaml`,
+`k8s/apply_config.sh`) rather than left in `vllm-benchmark`, so `toolbox` only needs
+this one repo checked out to run the study end-to-end — `vllm-benchmark` is no longer
+needed for this study once this repo is cloned there. Everything under `akamas/` and
+these `k8s/*.yaml` files is copied, as of that date, from
+`vllm-benchmark/studies/1-goodput-realistic-load/` (system, components, telemetry,
+study, and vLLM's deployment/service/PVC/secret templates) — re-sync manually if that
+study's own calibration changes later; nothing here pulls from it automatically.
+
+**Named separately, not reused.** System `vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling`,
+study `1-Goodput-Realistic-Load-Gatling`, workflow
+`1-Goodput-Realistic-Load-Gatling-Workflow` — distinct from the source study's own
+`vLLM_Benchmark_1_Goodput_Realistic_Load` / `1-Goodput-Realistic-Load` /
+`1-Goodput-Realistic-Load-Workflow-v2`. This lets both run side-by-side against the same
+cluster for comparison before any cutover, per this repo's own CLAUDE.md §9 guidance —
+goal, windowing, parametersSelection, and parameterConstraints are otherwise carried
+over unchanged, since none of that depends on which load generator drives the traffic.
+
+**What's intentionally NOT copied**: `infra/` (EKS cluster provisioning) and
+`k8s/monitoring/` (DCGM/Grafana/kube-prometheus-stack setup) — both are shared,
+already-running cluster infrastructure, not something tied to "this study" or to which
+load generator runs. This repo assumes that cluster and its monitoring stack already
+exist, same as the load generator itself assumes a running vLLM (see top of this file).
+
+**SSH key is never committed.** `akamas/id_rsa` (referenced by every task in
+`1-Goodput-Realistic-Load-Gatling-Workflow.yaml`) is gitignored, same as the root
+`.gitignore`'s existing `id_rsa`/`id_rsa.*` pattern — place the actual private key for
+`akamas@toolbox` at that exact path manually on the toolbox host after cloning this
+repo there, don't add it to git. (`vllm-benchmark`'s own copy of this key is tracked in
+that repo's git history despite its `.gitignore` also excluding `id_rsa` — a pre-existing,
+already-flagged issue there, not repeated here.)
+
+**Deploying the study:**
+
+```bash
+# On toolbox, once this repo is cloned to /work/akamas-gatling-llms-optimization and
+# akamas/id_rsa is placed manually (see above):
+akamas create -f akamas/system.yaml
+akamas create -f akamas/components/container.yaml
+akamas create -f akamas/components/gpu.yaml
+akamas create -f akamas/components/vllm.yaml
+akamas create -f akamas/telemetry/prometheus.yaml
+akamas create -f akamas/1-Goodput-Realistic-Load-Gatling-Workflow.yaml
+akamas create -f akamas/1-Goodput-Realistic-Load-Gatling.yaml
+akamas start study "1-Goodput-Realistic-Load-Gatling"
+```
+
+Validate every file with the `akamas` CLI before trusting it — don't assume a
+hand-copied file is still valid against the live pack version (`akamas list
+optimization-pack`) without checking.
+
 ## Results
 
 <Filled in once this load generator has actually run a trial against a real cluster.>

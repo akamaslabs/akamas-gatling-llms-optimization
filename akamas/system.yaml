@@ -1,0 +1,10 @@
+kind: system
+
+name: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling
+description: >-
+  Gatling variant of vllm-benchmark's 1-goodput-realistic-load study
+  (Qwen2.5-7B-Instruct on a single A10G, vLLM optimization pack 1.5.1) — same
+  goal/windowing/parametersSelection as the original AIPerf-driven study, only the
+  load generator differs (see this repo's README "Akamas study" section). Named
+  separately from vLLM_Benchmark_1_Goodput_Realistic_Load so the two can run
+  side-by-side for comparison before any cutover, per this repo's CLAUDE.md §9.

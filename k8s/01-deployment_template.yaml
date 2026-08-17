@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: llm-serving
+spec:
+  replicas: 1
+  # Recreate terminates the old pod before creating the new one.
+  # RollingUpdate (default) would deadlock here: the new pod waits for the GPU
+  # held by the old pod, which won't be killed until the new pod is ready.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      # Prevent Kubernetes from injecting service discovery env vars (e.g. VLLM_PORT=tcp://...)
+      # which conflict with vLLM's own VLLM_PORT variable and cause a crash on startup.
+      # See: https://docs.vllm.ai/en/stable/serving/env_vars.html
+      enableServiceLinks: false
+
+      # Pin to the GPU node group.
+      nodeSelector:
+        node-role: llm-serving
+
+      # Required to schedule on the tainted GPU node.
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.22.0
+          command: ["vllm", "serve"]
+          args:
+            - "Qwen/Qwen2.5-7B-Instruct"
+            - "--served-model-name=qwen2.5-7b"
+            - "--port=8000"
+            - "--host=0.0.0.0"
+            - "--enable-mfu-metrics"
+            # Prefix caching disabled entirely — this study's traffic pattern
+            # doesn't want caching at all. Hardcoded, not tied to any Akamas
+            # parameter (confirmed real flag from vLLM v0.22.0 source).
+            - "--no-enable-prefix-caching"
+
+            # --- Tuned (parametersSelection in akamas/1-Goodput-Realistic-Load-Gatling.yaml) ---
+            - "--gpu-memory-utilization=${vLLM.gpu_memory_utilization}"
+            - "--max-num-seqs=${vLLM.max_num_seqs}"
+            - "--max-num-batched-tokens=${vLLM.max_num_batched_tokens}"
+            - "--kv-cache-dtype=${vLLM.kv_cache_dtype}"
+            - "--performance-mode=${vLLM.performance_mode}"
+            - "--optimization-level=${vLLM.optimization_level}"
+            - "--block-size=${vLLM.block_size}"
+            - "--attention-backend=${vLLM.attention_backend}"
+            - "--enforce-eager=${vLLM.enforce_eager}"
+            - "--scheduling-policy=${vLLM.scheduling_policy}"
+            - "--disable-cascade-attn=${vLLM.disable_cascade_attn}"
+            - "--tokenizer-mode=${vLLM.tokenizer_mode}"
+            - "--async-scheduling=${vLLM.async_scheduling}"
+            - "--max-cudagraph-capture-size=${vLLM.max_cudagraph_capture_size}"
+
+            # --- Pinned (single A10G, non-MoE model) ---
+            - "--tensor-parallel-size=${vLLM.tensor_parallel_size}"
+            - "--pipeline-parallel-size=${vLLM.pipeline_parallel_size}"
+            - "--data-parallel-size=${vLLM.data_parallel_size}"
+            - "--enable-expert-parallel=${vLLM.enable_expert_parallel}"
+            - "--disable-custom-all-reduce=${vLLM.disable_custom_all_reduce}"
+            # Numeric precision/quantization — not a goodput lever this study
+            # tunes. Left at the pack's own default ("auto") by simply not being
+            # in parametersSelection; still renders every trial as a real
+            # component parameter.
+            - "--dtype=${vLLM.dtype}"
+            # Context parallelism requires multiple GPUs; this study has one.
+            - "--decode-context-parallel-size=${vLLM.decode_context_parallel_size}"
+            - "--prefill-context-parallel-size=${vLLM.prefill_context_parallel_size}"
+
+            # --- Pinned (real incidents on this exact vLLM/A10G combo, see the
+            #     source study's README) ---
+            - "--max-num-partial-prefills=${vLLM.max_num_partial_prefills}"
+            - "--max-long-partial-prefills=${vLLM.max_long_partial_prefills}"
+            - "--long-prefill-token-threshold=${vLLM.long_prefill_token_threshold}"
+            - "--max-model-len=${vLLM.max_model_len}"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              nvidia.com/gpu: "1"
+              cpu: "8"
+              memory: "28Gi"
+
+          # Model loading takes 5-15 minutes on first start.
+          # startupProbe allows up to 10 minutes (60 x 10 s) before failing.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            failureThreshold: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 60
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+
+      volumes:
+        # vLLM uses shared memory for CUDA IPC handles between workers.
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 12Gi
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: vllm-model-cache

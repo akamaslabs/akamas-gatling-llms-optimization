@@ -1,0 +1,47 @@
+kind: workflow
+
+name: 1-Goodput-Realistic-Load-Gatling-Workflow
+tasks:
+  - name: Write config
+    operator: FileConfigurator
+    arguments:
+      # REQUIRED for the baseline step's doNotRenderParameters to work — see
+      # akamas/1-Goodput-Realistic-Load-Gatling.yaml and the source study's own
+      # note on this same flag. Without it, FileConfigurator fails on every
+      # baseline trial (an excluded parameter's ${vLLM.*} token has no computed
+      # value to substitute).
+      ignoreUnsubstitutedTokens: true
+      source:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+        path: /work/akamas-gatling-llms-optimization/k8s/01-deployment_template.yaml
+      target:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+        path: /work/akamas-gatling-llms-optimization/k8s/01-deployment.yaml
+
+  - name: Apply config
+    operator: Executor
+    arguments:
+      retries: 0
+      timeout: 60m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+      command: bash /work/akamas-gatling-llms-optimization/k8s/apply_config.sh
+
+  - name: RunTest
+    operator: Executor
+    arguments:
+      # 12 x 300s = 60min sweep. See k8s/run_test_gatling.sh for the wait timeout
+      # (4500s) and why it stays comfortably under this task's own 90m timeout.
+      retries: 0
+      timeout: 90m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+      command: bash /work/akamas-gatling-llms-optimization/k8s/run_test_gatling.sh

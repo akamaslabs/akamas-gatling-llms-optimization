@@ -4,7 +4,9 @@ results/
 .cache/
 *.log
 .DS_Store
-id_rsa
-id_rsa.*
+
+# Rendered by the Akamas workflow's "Write config" task on toolbox — never checked in,
+# same as it never was in vllm-benchmark's own repo.
+k8s/01-deployment.yaml
 
 CLAUDE.md
