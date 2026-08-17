@@ -76,6 +76,19 @@ GraalVM JDK + Java libs, measured at **376MB**) at image-build time via `RUN npx
 build --typescript` — so there's no first-run download at all inside the Job, and no
 separate cache PVC is needed for it (an earlier version of this repo had one).
 
+The image needs to be pullable by the cluster with no credentials, so the GHCR package
+must be **public** — note this doesn't auto-follow from the repo's own visibility, and
+only takes effect from the first publish going forward, not retroactively (see the
+package's own Settings → Change visibility if it doesn't already show as public).
+
+**Versioned releases.** `scripts/release.sh [patch|minor|major]` bumps `package.json`'s
+version (via `npm version`, which also commits and tags), pushes the tag, and CI
+(`.github/workflows/build-and-push.yml`) then builds and pushes
+`ghcr.io/akamaslabs/akamas-gatling-llms-optimization:<version>` (plus `:<major>.<minor>`)
+and cuts a GitHub Release from it. A plain push to `main` still updates `:latest` and a
+`:<short-sha>` tag, without needing a release for every commit — pin `k8s/job.yaml` to a
+specific version tag instead of `:latest` once a known-good release exists to depend on.
+
 **Resource sizing is a starting point, not verified.** `requests: cpu 2, memory 4Gi`,
 `limits: cpu 4, memory 8Gi` — untested at 1024 concurrent closed-loop virtual users on a
 Node event loop. Load-test the load generator itself before trusting latency numbers near

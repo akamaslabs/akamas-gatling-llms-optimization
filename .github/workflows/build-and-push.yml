@@ -3,10 +3,11 @@ name: Build and push image
 on:
   push:
     branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -23,12 +24,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # On a `v*.*.*` tag (pushed by scripts/release.sh): tags the image with the exact
+      # version, its <major>.<minor>, and `latest`. On a plain push to main: tags with
+      # `latest` and the short commit sha only (no semver tags), so `main` always has a
+      # runnable image without needing a release for every commit.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short,enable={{is_default_branch}}
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # Cuts the GitHub Release the image version is meant to correspond to — only on
+      # the tag push, not on every plain push to main.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
