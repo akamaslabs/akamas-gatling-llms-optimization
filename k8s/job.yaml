@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gatling-benchmark
+  namespace: llm-benchmark
+spec:
+  # Do not retry on failure — a failed benchmark should be inspected, not silently retried.
+  # Same convention as the AIPerf job it replaces (05-job.yaml).
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+
+      # Run on the CPU node; the GPU node is tainted exclusively for vLLM.
+      nodeSelector:
+        node-role: system
+
+      initContainers:
+        # Identical intent to 05-job.yaml's own wait-for-vllm init container: vLLM cold
+        # starts take 5-15 minutes per trial's redeployed config, so without this the load
+        # generator would start hammering a not-yet-ready server.
+        - name: wait-for-vllm
+          image: alpine:3
+          command:
+            - sh
+            - -c
+            - |
+              until wget -qO- http://vllm.llm-serving.svc.cluster.local:8000/health >/dev/null 2>&1; do
+                echo "$(date -u +%T) waiting for vLLM readiness..."
+                sleep 10
+              done
+              echo "vLLM is ready."
+
+      containers:
+        # Built and pushed by .github/workflows/build-and-push.yml on every push to main
+        # (see README "Container build") — the image already has the simulation code,
+        # its dependencies, and Gatling's own runtime bundle baked in, so this container
+        # does nothing but run it. No git clone, no npm install, no per-run bundle
+        # download at all.
+        - name: gatling
+          image: ghcr.io/akamaslabs/akamas-gatling-llms-optimization:latest
+          env:
+            - name: BASE_URL
+              value: "http://vllm.llm-serving.svc.cluster.local:8000"
+          resources:
+            # Floor sizing from AIPerf's own footprint (05-job.yaml) — NOT yet
+            # load-tested at 1024 concurrent closed-loop virtual users on a JS event
+            # loop, unlike AIPerf's Rust-core/async-Python hybrid. See README
+            # "Resource sizing — flagged as unverified" before trusting trial data from
+            # a config near the top of the concurrency sweep.
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          volumeMounts:
+            - name: results
+              mountPath: /results
+
+      volumes:
+        - name: results
+          persistentVolumeClaim:
+            claimName: gatling-results

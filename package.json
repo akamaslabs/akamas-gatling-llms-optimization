@@ -1,0 +1,23 @@
+{
+  "name": "akamas-gatling-llms-optimization",
+  "version": "0.1.0",
+  "description": "Gatling closed-loop concurrency-sweep load generator for the vllm-benchmark 1-goodput-realistic-load Akamas study, replacing NVIDIA AIPerf.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-dataset": "node scripts/prepare-dataset.mjs",
+    "build": "gatling build --typescript",
+    "run": "gatling run --typescript --simulation vllmConcurrencySweep"
+  },
+  "dependencies": {
+    "@gatling.io/cli": "3.15.104",
+    "@gatling.io/core": "3.15.104",
+    "@gatling.io/http": "3.15.104"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^3.0.0",
+    "stream-chain": "^4.2.5",
+    "stream-json": "^3.5.0",
+    "typescript": "^5.6.0"
+  }
+}

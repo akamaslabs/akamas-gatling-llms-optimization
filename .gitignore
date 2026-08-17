@@ -1,0 +1,10 @@
+node_modules/
+target/
+results/
+.cache/
+*.log
+.DS_Store
+id_rsa
+id_rsa.*
+
+CLAUDE.md

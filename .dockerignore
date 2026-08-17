@@ -1,0 +1,7 @@
+node_modules
+target
+results
+.cache
+.git
+.github
+*.log
