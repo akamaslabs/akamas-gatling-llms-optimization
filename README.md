@@ -1,15 +1,11 @@
 # akamas-gatling-llms-optimization
 
-A Gatling load generator for vLLM, built to drive the `vllm-benchmark` repo's
-`1-goodput-realistic-load` Akamas study in place of NVIDIA AIPerf. It runs a
+A Gatling load generator for vLLM, built to drive load against a self-hosted model for Akamas Studio. It runs a
 closed-loop concurrency sweep (150→1024 users, log-spaced, 300s per level) against a
 vLLM OpenAI-compatible `/v1/chat/completions` endpoint, using a corpus of real
 ShareGPT prompts with realistic, variable output lengths. Ships as a standalone
 artifact — it doesn't provision infrastructure or deploy vLLM, it just drives load
 against whatever vLLM service you point it at.
-
-Rationale for every non-obvious choice, and the incidents found along the way, are in
-[DECISIONS.md](./DECISIONS.md) — this file just describes what's here.
 
 ## What's in this repo
 
