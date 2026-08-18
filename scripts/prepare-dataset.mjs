@@ -35,6 +35,9 @@ const SECRET_PATTERNS = [
   /xox[baprs]-[A-Za-z0-9-]{10,}/, // Slack token
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/, // PEM private key block
   /ya29\.[A-Za-z0-9_-]{20,}/, // Google OAuth access token
+  /hooks\.slack\.com\/services\/[A-Za-z0-9/]+/, // Slack incoming webhook
+  /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/, // JWT
+  /_token=[A-Za-z0-9]{20,}/, // token embedded in a URL query string
 ];
 // ShareGPT markdown-escapes underscores/asterisks (e.g. an API key's "_" becomes "\_"),
 // which breaks contiguous-charset regexes below — strip that escaping before matching.
