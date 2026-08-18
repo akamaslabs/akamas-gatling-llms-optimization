@@ -21,6 +21,26 @@ const DATASET_URL =
 const RAW_FILE = new URL("../.cache/sharegpt.json", import.meta.url);
 const OUTPUT_FILE = new URL("../resources/prompts.json", import.meta.url);
 
+// ShareGPT is raw, unfiltered ChatGPT export data — some conversations are real users
+// pasting real (or real-looking) credentials while asking for debugging help. Found
+// 2026-08-18 by inspecting the committed corpus: a live-looking Firebase API key, a
+// token embedded in a URL, cloud-provider client secrets. Reject any candidate whose
+// prompt matches a recognizable secret format before it's ever added to the corpus —
+// keeps this a one-time filter cost, not a "clean up after the fact" habit.
+const SECRET_PATTERNS = [
+  /AKIA[0-9A-Z]{16}/, // AWS access key ID
+  /AIza[0-9A-Za-z_-]{35}/, // Google / Firebase API key
+  /sk-[A-Za-z0-9]{20,}/, // OpenAI-style API key
+  /gh[pousr]_[A-Za-z0-9]{20,}/, // GitHub token
+  /xox[baprs]-[A-Za-z0-9-]{10,}/, // Slack token
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/, // PEM private key block
+  /ya29\.[A-Za-z0-9_-]{20,}/, // Google OAuth access token
+];
+// ShareGPT markdown-escapes underscores/asterisks (e.g. an API key's "_" becomes "\_"),
+// which breaks contiguous-charset regexes below — strip that escaping before matching.
+const unescapeMarkdown = (text) => text.replace(/\\([_*`~])/g, "$1");
+const containsLikelySecret = (text) => SECRET_PATTERNS.some((re) => re.test(unescapeMarkdown(text)));
+
 const MIN_SEQ_LEN = 4;
 const MAX_PROMPT_LEN = 1024;
 const MAX_TOTAL_LEN = 2048;
@@ -58,6 +78,7 @@ for await (const { value: conv } of pipeline) {
   const completion = turns[1]?.value;
   if (typeof prompt !== "string" || typeof completion !== "string") continue;
   if (turns[0].from !== "human" || turns[1].from !== "gpt") continue;
+  if (containsLikelySecret(prompt) || containsLikelySecret(completion)) continue;
 
   const promptLen = tokenizer.encode(prompt).length;
   const outputLen = tokenizer.encode(completion).length;
