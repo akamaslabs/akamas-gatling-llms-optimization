@@ -25,7 +25,23 @@ k8s/01-deployment_template.yaml,      The vLLM deployment/service/PVC this load
 akamas/                               Full Akamas study definition (system, components,
                                        telemetry, workflow, study) to run this as an
                                        Akamas optimization study end-to-end
+.gatling/package.conf                 Gatling Enterprise package descriptor (Config as Code)
+k8s/gatling-control-plane/            Gatling Enterprise control plane + Kubernetes private
+                                       location, so the load test runs as an in-cluster Job
+k8s/run_test_enterprise.sh            RunTest wrapper for the Enterprise/private-location path
+akamas/...-Gatling-Enterprise-Workflow.yaml   Akamas workflow variant using the Enterprise path
 ```
+
+## Two ways to run the load test
+
+Both run the load generator **as a Kubernetes Job inside the cluster**, next to vLLM:
+
+1. **Gatling Enterprise + in-cluster Kubernetes private location** (recommended) — a
+   control plane in the cluster turns each run into a batch Job and reports to Gatling
+   Enterprise (dashboards, assertions, trends). See
+   [`k8s/gatling-control-plane/README.md`](k8s/gatling-control-plane/README.md).
+2. **Raw Kubernetes Job** ([`k8s/job.yaml`](k8s/job.yaml) + `run_test_gatling.sh`) —
+   the original, kept as a **fallback**. No Enterprise dependency; results go to a PVC.
 
 ## Running locally
 
@@ -33,10 +49,29 @@ akamas/                               Full Akamas study definition (system, comp
 npm install
 npx gatling build --typescript
 npx gatling run --typescript --simulation vllmConcurrencySweep \
-  base.url=http://<vllm-host>:8000
+  base.url=http://<vllm-host>:8000 \
+  model=qwen2.5-7b \
+  sweep.levels=2,4 sweep.durationSeconds=10   # fast smoke test
 ```
 
-## Deploying the load generator
+Parameters (all `getParameter()`, overridable in every run context): `base.url`,
+`model` (must match vLLM's `--served-model-name`), `sweep.levels`,
+`sweep.durationSeconds`, `assert.maxFailedPercent`, `check.streamDone`,
+`default.maxTokens`.
+
+## Deploying via Gatling Enterprise (in-cluster private location)
+
+```bash
+# One-time: install the control plane (see k8s/gatling-control-plane/README.md for
+# the token Secret prerequisite).
+bash k8s/gatling-control-plane/install.sh
+
+# Deploy the package + start a run on the private location (needs
+# GATLING_ENTERPRISE_API_TOKEN in the environment):
+bash k8s/run_test_enterprise.sh
+```
+
+## Deploying the load generator (raw-Job fallback)
 
 ```bash
 kubectl apply -f k8s/00-pvc.yaml

@@ -38,6 +38,11 @@ spec:
           image: vllm/vllm-openai:v0.22.0
           command: ["vllm", "serve"]
           args:
+            # H100 MODEL SWITCH: change the HF model path below AND --served-model-name
+            # together. --served-model-name MUST equal the `model` the load generator
+            # sends -- keep it in sync with the simulation's `model` default
+            # (src/vllmConcurrencySweep.gatling.ts), the MODEL env in k8s/job.yaml, and
+            # the "model" systemProperty in .gatling/package.conf.
             - "Qwen/Qwen2.5-7B-Instruct"
             - "--served-model-name=qwen2.5-7b"
             - "--port=8000"

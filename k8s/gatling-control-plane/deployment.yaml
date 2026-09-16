@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gatling-control-plane
+  namespace: llm-benchmark
+  labels:
+    app: gatling-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gatling-control-plane
+  template:
+    metadata:
+      labels:
+        app: gatling-control-plane
+    spec:
+      serviceAccountName: gatling-control-plane
+      # Run the control plane on the CPU/system node, same as the load generators
+      # and the raw-Job fallback -- the GPU node is tainted exclusively for vLLM.
+      nodeSelector:
+        node-role: system
+      containers:
+        - name: control-plane
+          image: gatlingcorp/control-plane:latest
+          # control-plane.conf reads `token = ${?CONTROL_PLANE_TOKEN}`, so the token
+          # is injected here from the Secret and never stored in the ConfigMap/git.
+          env:
+            - name: CONTROL_PLANE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: gatling-control-plane-token
+                  key: token
+          volumeMounts:
+            - name: config
+              mountPath: /app/conf
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+      volumes:
+        - name: config
+          configMap:
+            # Built by install.sh from control-plane.conf + job.json.
+            name: gatling-control-plane

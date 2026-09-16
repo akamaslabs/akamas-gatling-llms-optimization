@@ -45,6 +45,11 @@ spec:
           env:
             - name: BASE_URL
               value: "http://vllm.llm-serving.svc.cluster.local:8000"
+            # MUST match --served-model-name in 01-deployment_template.yaml. When you
+            # switch model for the H100 run, change it here, in the deployment template,
+            # and in .gatling/package.conf's "model" systemProperty.
+            - name: MODEL
+              value: "qwen2.5-7b"
           resources:
             # Floor sizing from AIPerf's own footprint (05-job.yaml) — NOT yet
             # load-tested at 1024 concurrent closed-loop virtual users on a JS event

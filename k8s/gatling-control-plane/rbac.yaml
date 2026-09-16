@@ -1,0 +1,48 @@
+# RBAC for the Gatling Enterprise control plane running in-cluster.
+# The control plane creates a Kubernetes batch Job (plus a backing ConfigMap) per
+# run in the load-generator namespace, watches/reads the pods and their logs, and
+# deletes the Job when the run finishes -- so it needs exactly those verbs,
+# namespace-scoped, and nothing cluster-wide.
+# Docs: https://docs.gatling.io/reference/deploy/private-locations/kubernetes/installation/
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gatling-control-plane
+  namespace: llm-benchmark
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: gatling-control-plane
+  namespace: llm-benchmark
+rules:
+  # Verbs match the Gatling docs exactly (reference/deploy/private-locations/
+  # kubernetes/installation). The control plane PATCHES/UPDATES the per-run ConfigMap
+  # and uses deletecollection (not delete) to clean up finished Jobs -- getting these
+  # wrong makes runs fail after the API returns OK. Do not "tidy" this list.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "get", "patch", "update", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: gatling-control-plane
+  namespace: llm-benchmark
+subjects:
+  - kind: ServiceAccount
+    name: gatling-control-plane
+    namespace: llm-benchmark
+roleRef:
+  kind: Role
+  name: gatling-control-plane
+  apiGroup: rbac.authorization.k8s.io

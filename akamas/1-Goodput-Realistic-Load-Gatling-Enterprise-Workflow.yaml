@@ -1,0 +1,58 @@
+kind: workflow
+
+# Enterprise / private-location variant of 1-Goodput-Realistic-Load-Gatling-Workflow.
+# Identical Write config + Apply config steps (they deploy vLLM with each trial's
+# config -- unchanged). The ONLY difference is the RunTest step: instead of applying
+# a raw Kubernetes Job (k8s/run_test_gatling.sh), it starts a Gatling Enterprise run
+# on the in-cluster Kubernetes private location (k8s/run_test_enterprise.sh), which
+# the control plane executes as a batch Job in the cluster.
+#
+# The original workflow is kept as a fallback. To switch a study between them, change
+# its `workflow:` field (see akamas/1-Goodput-Realistic-Load-Gatling.yaml).
+name: 1-Goodput-Realistic-Load-Gatling-Enterprise-Workflow
+tasks:
+  - name: Write config
+    operator: FileConfigurator
+    arguments:
+      # REQUIRED for the baseline step's doNotRenderParameters to work -- see
+      # akamas/1-Goodput-Realistic-Load-Gatling.yaml and the source study's own
+      # note on this same flag. Without it, FileConfigurator fails on every
+      # baseline trial (an excluded parameter's ${vLLM.*} token has no computed
+      # value to substitute).
+      ignoreUnsubstitutedTokens: true
+      source:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+        path: /work/akamas-gatling-llms-optimization/k8s/01-deployment_template.yaml
+      target:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+        path: /work/akamas-gatling-llms-optimization/k8s/01-deployment.yaml
+
+  - name: Apply config
+    operator: Executor
+    arguments:
+      retries: 0
+      timeout: 60m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+      command: bash /work/akamas-gatling-llms-optimization/k8s/apply_config.sh
+
+  - name: RunTest
+    operator: Executor
+    arguments:
+      # Starts a Gatling Enterprise run on the in-cluster private location and blocks
+      # until it ends (see k8s/run_test_enterprise.sh). The runner must have
+      # GATLING_ENTERPRISE_API_TOKEN set (stored like akamas/id_rsa, never committed).
+      # 12 x 300s = 60min sweep; 90m timeout mirrors the fallback workflow's margin.
+      retries: 0
+      timeout: 90m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
+      command: bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh

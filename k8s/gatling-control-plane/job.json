@@ -1,0 +1,37 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "generateName": "gatling-load-generator-",
+    "namespace": "llm-benchmark"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "namespace": "llm-benchmark"
+      },
+      "spec": {
+        "nodeSelector": {
+          "node-role": "system"
+        },
+        "containers": [
+          {
+            "name": "gatling-container",
+            "resources": {
+              "requests": {
+                "cpu": "4",
+                "memory": "8Gi"
+              },
+              "limits": {
+                "cpu": "4",
+                "memory": "8Gi"
+              }
+            }
+          }
+        ],
+        "restartPolicy": "Never"
+      }
+    },
+    "ttlSecondsAfterFinished": 60
+  }
+}
