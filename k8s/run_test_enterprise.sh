@@ -1,41 +1,50 @@
 #!/bin/bash
-# Enterprise / private-location variant of run_test_gatling.sh.
+# Akamas RunTest trigger: start the load test on Gatling Enterprise.
 #
-# Instead of applying a raw Kubernetes Job, this deploys the package and starts a
-# Gatling Enterprise run on the in-cluster Kubernetes private location
-# (prl_akamas_vllm_k8s). The control plane turns that run into a batch Job in the
-# cluster -- same in-cluster execution as the fallback, but with Enterprise
-# reporting/assertions and no hand-rolled kubectl orchestration.
+# This is what the Akamas workflow's RunTest step runs each experiment. It starts the
+# ALREADY-DEPLOYED simulation on the in-cluster Kubernetes private location
+# (prl_akamas_vllm_k8s) and blocks until the run ends, exiting non-zero if the run
+# fails or the simulation's assertions fail -- so Akamas scores each experiment from
+# the run result. This is the "Akamas drives Gatling" trigger.
 #
-# The raw-Job path (run_test_gatling.sh + k8s/job.yaml) is kept as a fallback: point
-# the workflow's RunTest command back at it if the control plane is unavailable.
+# It uses Gatling's official CI shell script (start_simulation.sh), which calls the
+# Gatling Enterprise public API (https://api.gatling.io) directly. The Akamas runner
+# therefore needs only: bash, curl, jq, unzip, and the two env vars below -- NO Node,
+# no project checkout, no per-experiment package rebuild.
 #
-# Requires on the runner (toolbox):
-#   - Node + this repo's npm deps (`npm ci`, same as local runs)
-#   - GATLING_ENTERPRISE_API_TOKEN in the environment (Configure role or higher).
-#     Store it like akamas/id_rsa -- never commit it.
+# Deploy is a SEPARATE, one-time step (see deploy_enterprise.sh): the simulation code
+# doesn't change between experiments -- only the vLLM config does, and Akamas applies
+# that in the "Apply config" task. So we deploy once and trigger by simulation id here.
 #
-# NOTE: confirm the enterprise-start flags against `npx gatling enterprise-start --help`
-# for your @gatling.io/cli version (3.15.x) before the first live trial.
+# Required env on the runner (store like akamas/id_rsa -- never commit):
+#   GATLING_ENTERPRISE_API_TOKEN  API token with the Start role (api.gatling.io)
+#   GATLING_SIMULATION_ID         the deployed simulation id (test_...), from the
+#                                 Simulations table or deploy_enterprise.sh output
 set -euo pipefail
 
-REPO=/work/akamas-gatling-llms-optimization
-cd "$REPO"
-
 : "${GATLING_ENTERPRISE_API_TOKEN:?set GATLING_ENTERPRISE_API_TOKEN on the runner}"
+: "${GATLING_SIMULATION_ID:?set GATLING_SIMULATION_ID to the deployed simulation id (test_...)}"
 
-# Upsert the package/simulation from .gatling/package.conf. Idempotent once the
-# package id is pinned there after the first deploy.
-npx gatling enterprise-deploy
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CI_VERSION="1.0.3"
+CI_DIR="$HERE/.gatling-ci"
+CI_SCRIPT="$CI_DIR/start_simulation.sh"
 
-# Start the sweep and BLOCK until it finishes, so this task's exit status (and thus
-# the Akamas RunTest task's) reflects the run. Per the docs, --enterprise-simulation
-# takes the simulation's DISPLAY NAME (the `name` field in .gatling/package.conf), not
-# the class name. --wait-for-run-end exits non-zero if any assertion fails, so the
-# load-generator-health assertion in the simulation propagates to Akamas as a failed
-# trial. --non-interactive so it never prompts on the runner.
-npx gatling enterprise-start \
-  --enterprise-simulation="vLLM goodput concurrency sweep" \
-  --run-title "akamas-trial-$(date -u +%Y%m%dT%H%M%SZ)" \
-  --non-interactive \
-  --wait-for-run-end
+# Fetch Gatling's official CI script once (pinned), if it isn't already cached next to
+# this script. Downloaded at runtime rather than committed, so we don't vendor a
+# third-party script into the repo (see .gitignore: k8s/.gatling-ci/).
+if [ ! -x "$CI_SCRIPT" ]; then
+  echo "Fetching Gatling Enterprise CI script v${CI_VERSION}..."
+  mkdir -p "$CI_DIR"
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/ci.zip" \
+    "https://github.com/gatling/gatling-enterprise-ci-plugins/releases/download/v${CI_VERSION}/gatling-enterprise-ci-script-${CI_VERSION}.zip"
+  unzip -o -q "$tmp/ci.zip" -d "$CI_DIR"
+  chmod +x "$CI_SCRIPT"
+  rm -rf "$tmp"
+fi
+
+# Start the simulation and wait for the run to finish. start_simulation.sh streams live
+# metrics and exits non-zero if the run crashes or an assertion fails -- that exit code
+# becomes the Akamas RunTest task's result.
+exec "$CI_SCRIPT" "$GATLING_SIMULATION_ID"

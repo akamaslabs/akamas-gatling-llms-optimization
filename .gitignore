@@ -11,4 +11,8 @@ id_rsa.*
 # same as it never was in vllm-benchmark's own repo.
 k8s/01-deployment.yaml
 
+# Gatling's official CI script, downloaded at runtime by run_test_enterprise.sh — a
+# third-party artifact, not vendored into the repo.
+k8s/.gatling-ci/
+
 CLAUDE.md

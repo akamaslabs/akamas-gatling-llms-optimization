@@ -45,9 +45,12 @@ tasks:
   - name: RunTest
     operator: Executor
     arguments:
-      # Starts a Gatling Enterprise run on the in-cluster private location and blocks
-      # until it ends (see k8s/run_test_enterprise.sh). The runner must have
-      # GATLING_ENTERPRISE_API_TOKEN set (stored like akamas/id_rsa, never committed).
+      # Triggers the already-deployed Gatling Enterprise simulation on the in-cluster
+      # private location via Gatling's public API, and blocks until it ends (see
+      # k8s/run_test_enterprise.sh -- it uses the official start_simulation.sh, so the
+      # runner needs only curl/jq, not Node). Deploy the simulation ONCE first with
+      # k8s/deploy_enterprise.sh. The runner must have GATLING_ENTERPRISE_API_TOKEN and
+      # GATLING_SIMULATION_ID set (stored like akamas/id_rsa, never committed).
       # 12 x 300s = 60min sweep; 90m timeout mirrors the fallback workflow's margin.
       retries: 0
       timeout: 90m
