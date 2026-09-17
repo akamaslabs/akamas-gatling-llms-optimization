@@ -28,7 +28,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CI_VERSION="1.0.3"
 CI_DIR="$HERE/.gatling-ci"
-CI_SCRIPT="$CI_DIR/start_simulation.sh"
+# The release zip extracts into a versioned subfolder, not flat.
+CI_SCRIPT="$CI_DIR/gatling-enterprise-ci-script-${CI_VERSION}/start_simulation.sh"
 
 # Fetch Gatling's official CI script once (pinned), if it isn't already cached next to
 # this script. Downloaded at runtime rather than committed, so we don't vendor a
