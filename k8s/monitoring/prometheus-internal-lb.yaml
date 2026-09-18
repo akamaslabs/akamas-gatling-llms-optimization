@@ -1,0 +1,46 @@
+# Internal NLB exposing this cluster's Prometheus to Akamas.
+#
+# WHY THIS EXISTS: Akamas runs on the OTHER cluster (`vllm-bench`, namespace `akamas`)
+# and drives this one remotely — see infra/eks/cluster.yaml for why the clusters are
+# separate. The telemetry instance in akamas/telemetry/prometheus.yaml points at a
+# Prometheus address, and the in-cluster DNS name it uses on a single-cluster setup
+# (kube-prometheus-stack-prometheus.monitoring.svc.cluster.local) does not resolve from
+# another cluster. This Service gives Prometheus a private, VPC-routable address that
+# Akamas pods can reach.
+#
+# Internal, never internet-facing: Prometheus has no authentication of its own, so an
+# internet-facing LB here would publish every metric in the cluster to the world. Both
+# clusters share one VPC (see cluster.yaml), so `internal` is sufficient and correct.
+#
+# The selector is copied from the Service the kube-prometheus-stack chart creates
+# (verified against the live cluster on 2026-09-18) rather than invented — if the chart
+# is upgraded and its labels change, re-read them with:
+#   kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.spec.selector}'
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-akamas
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: prometheus
+    purpose: akamas-telemetry
+  annotations:
+    # Legacy in-tree/cloud-controller-manager annotations ON PURPOSE, not the
+    # AWS Load Balancer Controller ones (`aws-load-balancer-type: external` +
+    # `nlb-target-type` + `scheme`). That controller is NOT installed on the
+    # vllm-bench cluster and provision.sh does not install it here either; these two
+    # annotations are what the existing NLBs on vllm-bench actually use
+    # (nginx-ingress, open-webui) and are verified working on EKS 1.35.
+    # If the LB controller is ever added to this cluster, switch to its annotations.
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: prometheus
+    operator.prometheus.io/name: kube-prometheus-stack-prometheus
+  ports:
+    - name: http-web
+      port: 9090
+      targetPort: 9090
+      protocol: TCP

@@ -1,0 +1,104 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+# Throwaway cluster for the Gatling Enterprise variant of the goodput study.
+#
+# Deliberately SEPARATE from the shared `vllm-bench` cluster (decision 2026-09-18):
+# a Gatling Enterprise private location is an inbound channel — anyone with access to
+# the Gatling UI can start a load-test run against this cluster at any time, which is
+# unacceptable while other studies are measuring on shared hardware. The control plane
+# also brings Gatling's own agent into the cluster. A dedicated cluster contains both
+# and is deleted in one shot when the study is done.
+#
+# Derived from vllm-benchmark's studies/1-goodput-realistic-load/infra/eks/cluster.yaml
+# (the study this one replicates), with three deliberate changes — see each below.
+
+metadata:
+  name: vllm-bench-gatling
+  region: us-east-2
+  version: "1.35"
+  tags:
+    Project: vllm-bench-gatling
+    Provisioner: eksctl
+    # This cluster is meant to be deleted once the study and the slides are done.
+    Lifecycle: throwaway
+
+iam:
+  withOIDC: true
+
+addons:
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true
+
+# CHANGE 1 vs. the source config — reuse the EXISTING vllm-bench VPC instead of
+# letting eksctl create a new one.
+#
+# Akamas stays on the `vllm-bench` cluster and drives this one remotely, so it must be
+# able to reach this cluster's Prometheus. Sharing the VPC means an internal
+# LoadBalancer here is reachable from Akamas pods over a private address, with no VPC
+# peering and without exposing Prometheus to the internet. The two clusters stay fully
+# separate at the Kubernetes level — which is the point of the decision above.
+#
+# Subnet IDs read from the live vllm-bench cluster on 2026-09-18 (all six, 3 AZs,
+# ~8000 free IPs each). If that cluster is ever rebuilt, re-read them with:
+#   aws eks describe-cluster --name vllm-bench --region us-east-2 --profile lab \
+#     --query 'cluster.resourcesVpcConfig.subnetIds'
+vpc:
+  id: vpc-098d70b16dd296bf3
+  subnets:
+    public:
+      us-east-2a: { id: subnet-04db61365d14dd296 }
+      us-east-2b: { id: subnet-0cfc3532e8268ea75 }
+      us-east-2c: { id: subnet-04be71a0927f1af2a }
+    private:
+      us-east-2a: { id: subnet-08809492f18bbbaea }
+      us-east-2b: { id: subnet-0a4cb274f99c37224 }
+      us-east-2c: { id: subnet-0965aeecf6ae3a5fe }
+
+managedNodeGroups:
+
+  # CHANGE 2 vs. the source config
+  # The source config had `system` at m6i.xlarge (4 vCPU) because its load generator
+  # (AIPerf) asked for 2 CPU. Gatling's generator asks for 4 CPU / 8Gi, which does not
+  # fit alongside the monitoring stack on 4 vCPU — measured on the current cluster:
+  # a 4 vCPU node with monitoring on it has ~1.1 CPU free. Hence 8 vCPU here.
+  #
+  # Label stays `node-role: system` on purpose — k8s/gatling-control-plane/job.json and
+  # deployment.yaml both select `node-role: system`, and so does
+  # k8s/monitoring/values-kube-prometheus.yaml. Naming this node anything else means
+  # editing all three.
+  #
+  # Budget at 8 vCPU / 32 GiB (requests): generator 4 CPU/8Gi + monitoring ~0.5 CPU/2Gi
+  # + control plane 0.25 CPU/0.5Gi + daemonsets ~0.2 CPU — roughly 5 CPU / 11Gi used,
+  # leaving room to raise the generator to 6-7 CPU without reprovisioning. That headroom
+  # is deliberate: generator sizing is NOT verified at 1024 concurrent closed-loop VUs
+  # on a JS event loop (see PLAN.md "Known caveat").
+  - name: system
+    instanceType: m6i.2xlarge
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 1
+    volumeSize: 100
+    labels:
+      node-role: system
+
+  # CHANGE 3 vs. the source config: none — this group is intentionally IDENTICAL.
+  #
+  # g5.2xlarge is a single A10G, the exact hardware the main-branch run used. Keeping it
+  # identical is what lets this study reuse that run's parameter domains, the
+  # 1500ms/300ms SLA thresholds and its baseline without recalibration (PLAN.md). Do not
+  # "upgrade" this to a newer GPU without redoing that calibration.
+  - name: llm-serving
+    instanceType: g5.2xlarge
+    desiredCapacity: 1
+    minSize: 0
+    maxSize: 1
+    volumeSize: 100
+    amiFamily: AmazonLinux2023
+    labels:
+      node-role: llm-serving
+    taints:
+      - key: nvidia.com/gpu
+        value: "present"
+        effect: NoSchedule

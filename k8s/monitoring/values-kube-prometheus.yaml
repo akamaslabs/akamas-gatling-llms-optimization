@@ -1,0 +1,65 @@
+# Helm values for kube-prometheus-stack.
+# Install command (run after infra/k8s-bootstrap namespaces are created):
+#
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm upgrade --install kube-prometheus-stack \
+#     prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring \
+#     -f studies/1-goodput-realistic-load/k8s/monitoring/values-kube-prometheus.yaml
+
+# Disable rules for control-plane components EKS does not expose.
+defaultRules:
+  rules:
+    etcd: false
+    kubeScheduler: false
+    kubeControllerManager: false
+
+grafana:
+  adminPassword: "changeme"  # override with --set grafana.adminPassword=... or a secret
+  nodeSelector:
+    node-role: system
+  persistence:
+    enabled: true
+    storageClassName: gp3
+    size: 10Gi
+
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      node-role: system
+    # Allow the operator to pick up ServiceMonitors from ALL namespaces,
+    # not just the ones matching the Helm release label selector.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+
+alertmanager:
+  alertmanagerSpec:
+    nodeSelector:
+      node-role: system
+
+prometheusOperator:
+  nodeSelector:
+    node-role: system
+
+kube-state-metrics:
+  nodeSelector:
+    node-role: system
+
+# node-exporter must run on GPU nodes too to capture host-level metrics.
+# The toleration lets it schedule despite the nvidia.com/gpu taint.
+prometheusNodeExporter:
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule

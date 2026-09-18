@@ -1,0 +1,27 @@
+# Tells the Prometheus operator to scrape vLLM's /metrics endpoint.
+# vLLM exposes OpenAI-compatible server metrics (request count, latency
+# histograms, token throughput, KV-cache utilisation, etc.) on port 8000.
+#
+# Apply after kube-prometheus-stack is installed:
+#   kubectl apply -f studies/1-goodput-realistic-load/k8s/monitoring/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vllm
+  namespace: monitoring
+  labels:
+    app: vllm
+spec:
+  # Watch the llm-serving namespace for matching Services.
+  namespaceSelector:
+    matchNames:
+      - llm-serving
+  # Match the vLLM Service (studies/1-goodput-realistic-load/k8s/02-service.yaml) by its label.
+  selector:
+    matchLabels:
+      app: vllm
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 5s
+      scrapeTimeout: 4s

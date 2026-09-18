@@ -1,0 +1,2642 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Diagnostic dashboard for triaging vLLM performance, structured around the 5-step workflow from the Red Hat Developer article (March 2026). Each row corresponds to one diagnostic step: latency decomposition, server saturation, KV cache / VRAM health, sequence-length context, and distributed inference signals.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Source article",
+      "tooltip": "5 steps to triage vLLM performance (Red Hat Developer)",
+      "type": "link",
+      "url": "https://developers.redhat.com/articles/2026/03/09/5-steps-triage-vllm-performance"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "Step 1 \u2014 Isolate the symptom: TTFT vs. ITL",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Fleet-level headline panel: three series, aggregated across all selected pods.\n\n\u2022 p95 latency (solid, left axis): histogram_quantile computed over bucket-sums across pods \u2014 the correct method, since taking the max or mean of per-pod p95s misrepresents the true tail.\n\u2022 avg latency (dashed, left axis): sum(rate(latency_sum)) / sum(rate(latency_count)) \u2014 request-weighted across pods, not a naive mean of pod averages.\n\u2022 throughput (filled area, right axis): total successful req/s across pods.\n\nThis panel deliberately fixes p95 (not the dashboard's percentile selector) so config A/B comparisons always show the same SLO-relevant tail. The selector still controls TTFT, ITL, ISL/OSL, and Step 5 panels.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 latency"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Latency (s)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "avg latency"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "throughput"
+              },
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Throughput (req/s)"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[1m])))",
+          "legendFormat": "p95 latency",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:e2e_request_latency_seconds_sum{model_name=~\"$model\", pod=~\"$pod\"}[1m])) / clamp_min(sum(rate(vllm:e2e_request_latency_seconds_count{model_name=~\"$model\", pod=~\"$pod\"}[1m])), 1e-9)",
+          "legendFormat": "avg latency",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:request_success_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "throughput",
+          "refId": "C"
+        }
+      ],
+      "title": "E2E request latency (p95 + avg) and throughput \u2014 fleet aggregate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "TTFT decomposed at the fleet level: queueing delay + prefill compute.\n\n\u2022 p95 TTFT (solid, left axis): tail latency for the first token, the SLO-relevant figure.\n\u2022 avg TTFT (dashed, left axis): request-weighted mean.\n\u2022 prefill throughput (filled area, right axis): total prompt-tokens/sec aggregated across pods, computed from vllm:prompt_tokens_total. This is the natural companion to TTFT because prefill ends at first token.\n\nReading guide: if TTFT rises while prefill throughput also rises, you're prefill compute-saturated (more long prompts arriving). If TTFT rises while prefill throughput is flat or falling, the cause is queueing \u2014 confirm with Step 2's running/waiting panel.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 TTFT"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "TTFT (s)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "avg TTFT"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "prefill tokens/s"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Prefill tokens/s"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-purple"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[1m])))",
+          "legendFormat": "p95 TTFT",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:time_to_first_token_seconds_sum{model_name=~\"$model\", pod=~\"$pod\"}[1m])) / clamp_min(sum(rate(vllm:time_to_first_token_seconds_count{model_name=~\"$model\", pod=~\"$pod\"}[1m])), 1e-9)",
+          "legendFormat": "avg TTFT",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "prefill tokens/s",
+          "refId": "C"
+        }
+      ],
+      "title": "Time to First Token (p95 + avg) and prefill token throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "ITL at the fleet level \u2014 the per-token cost during decode.\n\n\u2022 p95 ITL (solid, left axis): tail of the inter-token interval. High p95 with low median = batching spikes from long-prompt arrivals.\n\u2022 avg ITL (dashed, left axis): request-weighted mean.\n\u2022 decode throughput (filled area, right axis): total generation-tokens/sec across pods, computed from vllm:generation_tokens_total. This is the 'tokens/sec the user sees' rate.\n\nReading guide: throughput up + ITL up = bigger batches (the throughput/latency trade-off in action). ITL up while throughput flat = bandwidth or interconnect issue, not batching.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 ITL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "ITL (s)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "avg ITL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "decode tokens/s"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Decode tokens/s"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 25
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[1m])))",
+          "legendFormat": "p95 ITL",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:inter_token_latency_seconds_sum{model_name=~\"$model\", pod=~\"$pod\"}[1m])) / clamp_min(sum(rate(vllm:inter_token_latency_seconds_count{model_name=~\"$model\", pod=~\"$pod\"}[1m])), 1e-9)",
+          "legendFormat": "avg ITL",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "decode tokens/s",
+          "refId": "C"
+        }
+      ],
+      "title": "Inter-Token Latency (p95 + avg) and decode token throughput",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 101,
+      "panels": [],
+      "title": "Step 2 \u2014 Detect server saturation",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Running = requests actively on GPU (batch size). Waiting = queue depth. If Waiting is consistently > 0, the server is saturated and TTFT will rise due to queueing. If Waiting is 0 but TTFT is still high, the bottleneck is prefill compute (long prompts), not queueing.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*waiting.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*running.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(vllm:num_requests_running{model_name=~\"$model\", pod=~\"$pod\"})",
+          "legendFormat": "running",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(vllm:num_requests_waiting{model_name=~\"$model\", pod=~\"$pod\"})",
+          "legendFormat": "waiting",
+          "refId": "B"
+        }
+      ],
+      "title": "Running vs. waiting requests",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 102,
+      "panels": [],
+      "title": "Step 3 \u2014 Evaluate VRAM and KV cache health",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Fleet KV cache occupancy \u2014 average and max across pods. The max line is the leading indicator: if one pod hits 95% while the fleet average is 70%, you have a hot pod that will start preempting before the average tells you anything is wrong. Sustained max \u2265 90% means memory pressure somewhere. Remediation per the article: quantize weights (FP8/AWQ/GPTQ), quantize KV cache (--kv-cache-dtype fp8), reduce --max-num-seqs, scale out, or use a smaller model.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.8
+              },
+              {
+                "color": "red",
+                "value": 0.95
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg(vllm:kv_cache_usage_perc{model_name=~\"$model\", pod=~\"$pod\"})",
+          "legendFormat": "avg KV occupancy",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max(vllm:kv_cache_usage_perc{model_name=~\"$model\", pod=~\"$pod\"})",
+          "legendFormat": "max KV occupancy",
+          "refId": "B"
+        }
+      ],
+      "title": "KV cache occupancy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Preemption rate \u2014 requests stopped mid-generation to free memory. Any sustained rate above zero indicates memory thrashing and causes severe latency spikes. Remediation: lower --max-num-seqs so the scheduler doesn't admit more than the KV cache can sustain.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(vllm:num_preemptions_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "preemptions/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Preemption rate (req/s) \u2014 should be ~0",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Prefix cache hit rate \u2014 share of token lookups that reused cached prompt prefixes. High values (e.g. multi-turn chat, RAG with stable system prompts) directly reduce TTFT and compute. Low values in a RAG/chat workload may indicate the prompt isn't structured prefix-first.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.2
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(vllm:prefix_cache_hits_total{model_name=~\"$model\", pod=~\"$pod\"}[1m])) / clamp_min(sum(rate(vllm:prefix_cache_queries_total{model_name=~\"$model\", pod=~\"$pod\"}[1m])), 1)",
+          "legendFormat": "prefix cache hit rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Prefix cache hit rate",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Step 4 \u2014 Analyze request sequence lengths",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "ISL distribution across the fleet.\n\n\u2022 p95 (solid): tail of the prompt length distribution.\n\u2022 avg (dashed): mean prompt length.\n\nHistogram aggregation uses sum-then-quantile (the only correct method) for p95, and sum(rate(_sum)) / sum(rate(_count)) for avg.\n\nWhy this matters: long prompts drive prefill cost and TTFT.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 ISL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Prompt tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "avg ISL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:request_prompt_tokens_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m])))",
+          "legendFormat": "p95 ISL",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:request_prompt_tokens_sum{model_name=~\"$model\", pod=~\"$pod\"}[5m])) / clamp_min(sum(rate(vllm:request_prompt_tokens_count{model_name=~\"$model\", pod=~\"$pod\"}[5m])), 1e-9)",
+          "legendFormat": "avg ISL",
+          "refId": "B"
+        }
+      ],
+      "title": "Input sequence length \u2014 ISL tokens (p95 + avg)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "OSL distribution across the fleet.\n\n\u2022 p95 (solid): tail of the output length distribution.\n\u2022 avg (dashed): mean output length.\n\nHistogram aggregation uses sum-then-quantile (the only correct method) for p95, and sum(rate(_sum)) / sum(rate(_count)) for avg.\n\nWhy this matters: long outputs drive total latency linearly via ITL.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "p95 OSL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "Generation tokens"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "avg OSL"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:request_generation_tokens_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m])))",
+          "legendFormat": "p95 OSL",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:request_generation_tokens_sum{model_name=~\"$model\", pod=~\"$pod\"}[5m])) / clamp_min(sum(rate(vllm:request_generation_tokens_count{model_name=~\"$model\", pod=~\"$pod\"}[5m])), 1e-9)",
+          "legendFormat": "avg OSL",
+          "refId": "B"
+        }
+      ],
+      "title": "Output sequence length \u2014 OSL tokens (p95 + avg)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Fleet-aggregate token throughput, split into prefill (prompt) and decode (generation) tokens/sec.\n\nThe visible gap is informative: prefill is parallel (per scheduler step it can process thousands of tokens at once), decode is sequential (one token per request per step). Roughly the same number of req/s through the system produces a much higher prefill rate than decode rate \u2014 this is the asymmetry that makes ISL drive TTFT and OSL drive total latency.\n\nA sudden drop in decode rate with prefill rate steady usually means decode is being preempted (check Step 3).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "prefill tokens/s"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-purple"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "decode tokens/s"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "semi-dark-green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:prompt_tokens_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "prefill tokens/s",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(vllm:generation_tokens_total{model_name=~\"$model\", pod=~\"$pod\"}[1m]))",
+          "legendFormat": "decode tokens/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Token throughput \u2014 prefill vs decode (fleet aggregate)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 60
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Step 5 \u2014 Review distributed inference strategy",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Fleet-aggregate snapshot of the four key signals: tail latency, tail ITL, total throughput, average KV occupancy. With per-pod divergence detection consolidated away, this is the at-a-glance health summary. If you need to inspect individual pods, switch the $pod selector to a single pod.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "displayName",
+                "value": "p${percentile:text} E2E"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "displayName",
+                "value": "p${percentile:text} ITL"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "displayName",
+                "value": "throughput"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "D"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "displayName",
+                "value": "KV occupancy"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 61
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(${percentile}, sum by(le)(rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m])))",
+          "legendFormat": "E2E latency",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(${percentile}, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m])))",
+          "legendFormat": "ITL",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(vllm:request_success_total{model_name=~\"$model\", pod=~\"$pod\"}[5m]))",
+          "legendFormat": "req/s",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg(vllm:kv_cache_usage_perc{model_name=~\"$model\", pod=~\"$pod\"})",
+          "legendFormat": "KV occupancy",
+          "refId": "D"
+        }
+      ],
+      "title": "Fleet summary \u2014 p95 / req/s / KV occupancy",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Fleet-level ITL with min/max envelope. The min and max lines bracket the spread across pods without drawing one line per pod. When max diverges sharply from p95, you have an outlier pod \u2014 typically an interconnect issue (PCIe vs NVLink, cross-NUMA). Confirm with `nvidia-smi topo -m` on the affected node.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "A"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "C"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    4,
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 61
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "histogram_quantile(0.95, sum by(le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m])))",
+          "legendFormat": "fleet p95",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max(histogram_quantile(0.95, sum by(pod, le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m]))))",
+          "legendFormat": "worst-pod p95",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min(histogram_quantile(0.95, sum by(pod, le)(rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\", pod=~\"$pod\"}[5m]))))",
+          "legendFormat": "best-pod p95",
+          "refId": "C"
+        }
+      ],
+      "title": "ITL \u2014 fleet p95 / min / max envelope",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
+      "id": 106,
+      "panels": [],
+      "title": "GPU utilization (DCGM-exporter)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Legacy NVML-style GPU utilization \u2014 fraction of time at least one CUDA kernel was executing on the GPU. This is what `nvidia-smi`, the Kubernetes device plugin, and most autoscalers see. Keep it visible for cross-referencing with external tooling, but DO NOT rely on it alone for LLM inference tuning: a value near 100% only means 'some kernel is running', not 'compute pipes are saturated'. The profiling row below (SM Active / Occupancy / Tensor / DRAM) tells you what kind of work is actually happening. Classic LLM-decode pattern: GPU_UTIL \u2248 100% while Tensor Active stays low and DRAM Active is high \u2014 the card is busy moving weights and KV, not doing matmuls.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 100,
+          "min": 0,
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg by(gpu)(DCGM_FI_DEV_GPU_UTIL{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "GPU_UTIL (NVML legacy \u2014 for cross-reference with nvidia-smi)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "SM activity \u2014 fraction of cycles each Streaming Multiprocessor had at least one warp assigned. Higher is better for batch/throughput workloads. For LLM inference, sustained SM_ACTIVE well below 1.0 usually means either small batch (memory-bound decode) or scheduler under-utilization \u2014 confirm by cross-referencing with running batch size in Step 2. NOTE: DCGM_FI_PROF_* metrics are reported as ratios (0.0\u20131.0) in recent dcgm-exporter; older versions emit percent (0\u2013100). Adjust the unit if needed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 76
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg by(gpu)(DCGM_FI_PROF_SM_ACTIVE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "SM Active",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "SM Occupancy \u2014 fraction of warp slots filled on each SM, averaged over the sampling period. Where SM_ACTIVE asks 'is the SM doing anything?', occupancy asks 'how saturated is its scheduling capacity?'. Low occupancy with high SM_ACTIVE is the classic LLM-decode signature: kernels are launching but each has too few warps to hide memory latency \u2014 the GPU is starved by skinny GEMMs reading the KV cache. Remediation is the same as for DRAM-bound decode: larger effective batch (raise --max-num-seqs if KV headroom allows), or shrink per-step bytes via FP8 / KV quantization. Note: PROF_SM_OCCUPANCY is sampled, not a true cycle-accurate count.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 76
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg by(gpu)(DCGM_FI_PROF_SM_OCCUPANCY{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "SM Occupancy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Tensor pipe activity \u2014 fraction of cycles the tensor (HMMA) pipe is doing matrix-multiply work. This is your most direct signal of useful AI compute. Low values during high request load usually mean decode is memory-bandwidth-bound (skinny GEMMs in autoregressive generation), not that the GPU is idle. Multiply by the GPU's marketed peak TFLOPS to estimate effective TFLOPS (e.g. H100 FP8: \u00d7 1979).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 76
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg by(gpu)(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Tensor Core Active (HMMA pipe)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "DRAM activity \u2014 fraction of cycles the GPU memory interface is reading or writing. This is the single most relevant utilization signal for vLLM decode: autoregressive generation re-reads model weights and KV cache for every token, so high DRAM_ACTIVE with modest TENSOR_ACTIVE is the classic memory-bandwidth-bound signature. Remediation per the article: FP8 quantization shrinks the per-step bytes read, moving you off this bound.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 76
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "avg by(gpu)(DCGM_FI_PROF_DRAM_ACTIVE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "DRAM Active (memory bandwidth) \u2014 the decode bottleneck signal",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Framebuffer (VRAM) used vs. total per GPU. Total is computed as USED + FREE since dcgm-exporter's default CSV exposes both but not a TOTAL field directly. vLLM pre-allocates KV cache space at startup based on --gpu-memory-utilization (default 0.9), so USED usually sits flat near that fraction of TOTAL; sharp drops indicate the engine released the KV pool, sharp rises with a fresh deployment mean the model load completed. The visual gap between USED and TOTAL is your headroom \u2014 small headroom is expected and intentional in vLLM, but if you push --gpu-memory-utilization too aggressively this gap closes and the pod becomes vulnerable to OOM under load.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^total.*"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    10,
+                    10
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 84
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(gpu)(DCGM_FI_DEV_FB_USED{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "used \u00b7 gpu {{gpu}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(gpu)(DCGM_FI_DEV_FB_USED{pod=~\"$pod\", gpu=~\"$gpu\"} + DCGM_FI_DEV_FB_FREE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "total \u00b7 gpu {{gpu}}",
+          "refId": "B"
+        }
+      ],
+      "title": "GPU framebuffer memory (used / total)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "GPU power draw vs. the configured power management limit per GPU.\n\n\u2022 Solid line: current power draw (DCGM_FI_DEV_POWER_USAGE).\n\u2022 Dashed line: power limit (DCGM_FI_DEV_POWER_MGMT_LIMIT) \u2014 the cap above which the GPU will start clocking down to stay within budget.\n\nHealthy inference draw typically sits at 60\u201385% of the limit under load. Sustained draw at or near the dashed line, especially combined with nonzero values in the power-violation panel to the right, means the card is being throttled and you're leaving performance on the table. Possible remedies: increase the power limit (`nvidia-smi -pl <watts>` on the node, if admin policy allows) or reduce per-GPU concurrency (lower --max-num-seqs, scale out replicas).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "watt"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 84
+      },
+      "id": 22,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by(gpu)(DCGM_FI_DEV_POWER_USAGE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "max by(gpu)(DCGM_FI_DEV_POWER_MGMT_LIMIT{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "limit \u00b7 gpu {{gpu}}",
+          "refId": "B"
+        }
+      ],
+      "title": "GPU power draw vs. power limit",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "GPU and memory temperature. Throttling typically kicks in around 83\u201388\u00b0C depending on SKU. Sustained high temperatures correlate with the throttling-violation counters on the right.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 5,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 75
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "celsius"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 92
+      },
+      "id": 23,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by(gpu)(DCGM_FI_DEV_GPU_TEMP{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "GPU \u00b7 gpu {{gpu}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by(gpu)(DCGM_FI_DEV_MEMORY_TEMP{pod=~\"$pod\", gpu=~\"$gpu\"})",
+          "legendFormat": "mem \u00b7 gpu {{gpu}}",
+          "refId": "B"
+        }
+      ],
+      "title": "GPU & memory temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Throttling violation duration rate (ns/s). Any sustained nonzero rate on POWER or THERMAL means the GPU is clamping clocks, which directly hurts ITL. Note: these counters are commented out in default-counters.csv on dcgm-exporter \u2014 they must be explicitly enabled in your metrics ConfigMap. If the panel is empty, that's the most likely reason.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "ns"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 92
+      },
+      "id": 24,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(gpu)(rate(DCGM_FI_DEV_POWER_VIOLATION{pod=~\"$pod\", gpu=~\"$gpu\"}[1m]))",
+          "legendFormat": "power \u00b7 gpu {{gpu}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(gpu)(rate(DCGM_FI_DEV_THERMAL_VIOLATION{pod=~\"$pod\", gpu=~\"$gpu\"}[1m]))",
+          "legendFormat": "thermal \u00b7 gpu {{gpu}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Throttling violations (power / thermal)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "PCIe replay counter rate \u2014 retries on the PCIe link. A nonzero rate indicates link-level errors that can stall host\u2194GPU and (on systems without NVLink) GPU\u2194GPU traffic \u2014 directly relevant to the interconnect overhead discussion in Step 5. Pair with `nvidia-smi topo -m` to see whether traffic is going over PCIe vs NVLink.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "showPoints": "never"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 92
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "sum"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by(gpu)(rate(DCGM_FI_DEV_PCIE_REPLAY_COUNTER{pod=~\"$pod\", gpu=~\"$gpu\"}[1m]))",
+          "legendFormat": "gpu {{gpu}}",
+          "refId": "A"
+        }
+      ],
+      "title": "PCIe replay rate (interconnect health)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "id": 107,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "FP16 non-tensor pipe activity \u2014 fraction of cycles the FP16 CUDA cores (NOT the tensor cores) are doing work. Captures FP16 elementwise / non-matmul work: activations, softmax, layernorm, RoPE, and any custom kernels routed through FP16 cores. For standard vLLM inference this typically sits at low values because tensor cores dominate; spikes here usually mean a custom sampler, beam search, non-fused attention variant, or non-tensor-core-friendly kernel path is active. NOT a substitute for PIPE_TENSOR_ACTIVE (matmul lives there).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "max": 1,
+              "min": 0,
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 101
+          },
+          "id": 28,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "avg by(gpu)(DCGM_FI_PROF_PIPE_FP16_ACTIVE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+              "legendFormat": "gpu {{gpu}}",
+              "refId": "A"
+            }
+          ],
+          "title": "FP16 pipe active (non-tensor)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "description": "FP32 non-tensor pipe activity \u2014 fraction of cycles the FP32 CUDA cores are doing work. In an FP16/BF16 inference workload this should stay near zero; unexpectedly high values suggest a code path has dropped to FP32, often unintentionally. Common culprits: reduction accumulators in unfused kernels, FP32 master-weight copies in mixed-precision paths, logit processors operating in FP32, or a model loaded with the wrong dtype. Useful precision sanity check, not a primary triage metric.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true
+              },
+              "max": 1,
+              "min": 0,
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 101
+          },
+          "id": 29,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "avg by(gpu)(DCGM_FI_PROF_PIPE_FP32_ACTIVE{pod=~\"$pod\", gpu=~\"$gpu\"})",
+              "legendFormat": "gpu {{gpu}}",
+              "refId": "A"
+            }
+          ],
+          "title": "FP32 pipe active (non-tensor) \u2014 precision sanity check",
+          "type": "timeseries"
+        }
+      ],
+      "title": "Advanced: non-tensor pipe activity (FP16 / FP32)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 101
+      },
+      "id": 105,
+      "panels": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "grafana"
+          },
+          "description": "Decision flow from the Red Hat Developer article. Use this as the operator runbook overlay for the panels above.\n\n1. **Define success first** \u2014 throughput-sensitive, latency-sensitive, or bursty? Optimization differs.\n\n2. **Symptom: TTFT vs ITL.** High E2E + high TTFT + low ITL \u2192 likely queueing or long prefill. High ITL \u2192 bandwidth-/batch-bound.\n\n3. **Saturation.** num_requests_waiting > 0 sustained \u2192 admission-limited. waiting = 0 + high TTFT \u2192 prefill compute-bound.\n\n4. **KV cache health.** Occupancy \u2265 90% or any preemption rate \u2192 memory pressure. Remediate with quantization (FP8/AWQ/GPTQ, --kv-cache-dtype fp8), --max-num-seqs reduction, smaller model, or more/larger GPUs.\n\n5. **Sequence shape.** Long ISL drives TTFT; long OSL drives total latency via ITL. RAG: put static prefix first to maximize prefix cache hit.\n\n6. **Distribution.** Use minimum TP that fits the model, then scale with replicas. 2\u00d7 TP=2 usually beats 1\u00d7 TP=4. Check `nvidia-smi topo -m` for PCIe-vs-NVLink penalties.\n\n**GPU utilization (DCGM).** Tensor pipe high + DRAM moderate = compute-bound (prefill-dominated). Tensor pipe modest + DRAM high = memory-bandwidth-bound (decode-dominated, classic LLM inference). Any throttling-violation rate or PCIe replay rate above zero is a hardware-level issue masking software tuning.\n\n**Remediation toolbox**: right-size model \u00b7 scale hardware (more replicas; higher-bandwidth GPUs) \u00b7 quantize weights + KV cache \u00b7 speculative decoding (MTP, EAGLE3, draft, n-gram) \u00b7 refine TP/DP mix.\n\nSource: https://developers.redhat.com/articles/2026/03/09/5-steps-triage-vllm-performance",
+          "gridPos": {
+            "h": 16,
+            "w": 24,
+            "x": 0,
+            "y": 102
+          },
+          "id": 17,
+          "options": {
+            "mode": "markdown",
+            "content": "## Triage runbook\n\n| Step | What to look at | Likely cause if abnormal |\n|------|-----------------|--------------------------|\n| 1. Symptom | E2E, TTFT, ITL panels | High TTFT + low ITL \u2192 queueing or long prefill. High ITL \u2192 bandwidth/batch. |\n| 2. Saturation | Running vs. waiting, queue depth | Waiting > 0 \u2192 admission-limited. Waiting = 0 but TTFT high \u2192 prefill compute-bound. |\n| 3. KV cache | Occupancy, preemptions, prefix hit rate | \u2265 90% occupancy or any preemption \u2192 quantize / reduce `--max-num-seqs` / scale GPUs. |\n| 4. Sequence shape | ISL & OSL panels | Long ISL \u2192 TTFT pressure. Long OSL \u2192 linear E2E pressure via ITL. RAG: prefix-first prompts. |\n| 5. Distribution | Per-pod summary, p95 ITL per pod | Divergence between pods \u2192 check `nvidia-smi topo -m`; prefer replicas over high TP. |\n| GPU (DCGM) | SM / Tensor / DRAM active, power, temp, throttling, PCIe replay | Tensor high + DRAM modest \u2192 compute-bound (prefill). Tensor modest + DRAM high \u2192 memory-bandwidth-bound (decode \u2014 classic LLM inference). Any throttling or PCIe replay > 0 \u2192 hardware-level cause that masks tuning. |\n\n**Remediation toolbox** \u2014 right-size the model \u00b7 add replicas or higher-bandwidth GPUs \u00b7 quantize weights + KV cache (`--kv-cache-dtype fp8`) \u00b7 speculative decoding (MTP, EAGLE3, draft model, n-gram) \u00b7 refine TP / DP mix (min TP that fits, then scale out).\n\n**Source** \u2014 [5 steps to triage vLLM performance, Red Hat Developer, Mar 2026](https://developers.redhat.com/articles/2026/03/09/5-steps-triage-vllm-performance)"
+          },
+          "type": "text"
+        }
+      ],
+      "title": "Triage runbook & remediation guide",
+      "type": "row"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "vllm",
+    "llm",
+    "inference",
+    "ai",
+    "triage"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "p95",
+          "value": "0.95"
+        },
+        "description": "Latency percentile applied to all histogram_quantile() panels. Single value, so each chart shows one line per pod, making config comparisons across time / deployments visually clean.",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Percentile",
+        "multi": false,
+        "name": "percentile",
+        "options": [
+          {
+            "selected": false,
+            "text": "p50",
+            "value": "0.5"
+          },
+          {
+            "selected": false,
+            "text": "p90",
+            "value": "0.9"
+          },
+          {
+            "selected": true,
+            "text": "p95",
+            "value": "0.95"
+          },
+          {
+            "selected": false,
+            "text": "p99",
+            "value": "0.99"
+          }
+        ],
+        "query": "p50 : 0.5, p90 : 0.9, p95 : 0.95, p99 : 0.99",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(vllm:num_requests_running, model_name)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".+",
+        "label": "Model",
+        "multi": true,
+        "name": "model",
+        "options": [],
+        "query": {
+          "query": "label_values(vllm:num_requests_running, model_name)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(vllm:num_requests_running{model_name=~\"$model\"}, pod)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".+",
+        "label": "Pod",
+        "multi": true,
+        "name": "pod",
+        "options": [],
+        "query": {
+          "query": "label_values(vllm:num_requests_running{model_name=~\"$model\"}, pod)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(DCGM_FI_DEV_GPU_TEMP, gpu)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".+",
+        "label": "GPU",
+        "multi": true,
+        "name": "gpu",
+        "options": [],
+        "query": {
+          "query": "label_values(DCGM_FI_DEV_GPU_TEMP, gpu)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "vLLM Performance Triage (5-step workflow)",
+  "uid": "vllm-triage-5step",
+  "version": 1,
+  "weekStart": ""
+}

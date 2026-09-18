@@ -1,0 +1,42 @@
+# Helm values for NVIDIA DCGM Exporter.
+# Exposes GPU hardware metrics (utilisation, VRAM, power, temperature) to Prometheus.
+#
+# Install (after creating the dcgm-custom-metrics ConfigMap from dcgm_counters.csv —
+# see this study's infra/eks/provision.sh printed next-steps, or infra/README.md):
+#   helm repo add gpu-helm-charts https://nvidia.github.io/dcgm-exporter/helm-charts
+#   helm repo update
+#   helm upgrade --install dcgm-exporter gpu-helm-charts/dcgm-exporter \
+#     --namespace monitoring \
+#     -f studies/1-goodput-realistic-load/k8s/monitoring/dcgm-exporter-values.yaml
+
+# Run only on the GPU node (node-role: llm-serving).
+nodeSelector:
+  node-role: llm-serving
+
+# Required to schedule on the tainted GPU node.
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Let Prometheus (via kube-prometheus-stack) scrape DCGM metrics every 5 s.
+# serviceMonitorSelectorNilUsesHelmValues: false in prometheus values ensures
+# this ServiceMonitor is picked up without needing extra labels.
+serviceMonitor:
+  enabled: true
+  interval: 5s
+  scrapeTimeout: 4s
+  namespace: monitoring
+
+extraConfigMapVolumes:
+- name: exporter-metrics-volume
+  configMap:
+    name: dcgm-custom-metrics
+    items:
+    - key: metrics
+      path: dcgm_counters.csv
+
+extraVolumeMounts:
+- name: exporter-metrics-volume
+  mountPath: /etc/dcgm-exporter/default-counters.csv
+  subPath: dcgm_counters.csv

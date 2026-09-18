@@ -16,3 +16,6 @@ k8s/01-deployment.yaml
 k8s/.gatling-ci/
 
 CLAUDE.md
+
+# JetBrains IDE settings — local, never shared.
+.idea/

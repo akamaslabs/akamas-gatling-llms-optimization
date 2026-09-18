@@ -1,0 +1,14 @@
+# Second StorageClass, applied alongside ../eks/storageclass.yaml (the "gp3" default).
+# gp3-ephemeral uses a Delete reclaim policy — for volumes that are cheap to
+# regenerate (e.g. the model-cache PVC, re-downloadable from Hugging Face), so
+# tearing the study down doesn't leave an orphaned EBS volume behind.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3-ephemeral
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete

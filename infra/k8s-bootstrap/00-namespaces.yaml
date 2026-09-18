@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-serving
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm-benchmark
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
