@@ -67,7 +67,8 @@ unable to be re-run against the cluster it was measured on.
 
 ### Done
 
-A1 toolbox cluster access · A2 branch on toolbox · A3 monitoring stack.
+A1 toolbox cluster access · A2 branch on toolbox · A3 monitoring stack ·
+A4 Prometheus exposed to Akamas · A5 Gatling control plane.
 
 ---
 
@@ -120,11 +121,23 @@ Then set that hostname as `config.address` in
 `REPLACE_WITH_NLB_HOSTNAME_SEE_PLAN_A4` placeholder. The instance itself is created in A7,
 so there is no update-in-place question to answer.
 
-### A5. Gatling control plane — NOT blocked
+### A5. Gatling control plane — ✅ DONE
 
-Needs only the `cpt_` control-plane token ✅: `install.sh` checks for the Secret and
-nothing else, and `control-plane.conf` references no team and no API token. The team name
-and the Configure/Start token roles belong to **A6**, not here.
+Installed and registered ✅. The pod logs confirm what matters:
+
+```
+Control plane version: 2026.38.4        Control plane ID: cp_akamas_demo
+Configured locations:
+  - Location prl_akamas_vllm_k8s [kubernetes]
+Control plane status OK.                Starting to pull messages
+```
+
+Stable, 0 restarts. `Control plane status OK` means the token authenticated against
+Gatling Enterprise; `prl_akamas_vllm_k8s` is the id `.gatling/package.conf` references.
+Still worth confirming visually under Admin → Private Locations in the UI.
+
+Needed only the `cpt_` token: `install.sh` checks for that Secret and nothing else, and
+`control-plane.conf` references no team and no API token.
 
 The token was passed as 400 characters — that is the same 200-character token pasted
 twice ✅. Use **one half**.
@@ -146,13 +159,18 @@ downstream works.
 `deployment.yaml` and `job.json` both select `node-role: system`, which matches this
 cluster ✅ — the reason the combined node kept that label.
 
-### A6. Deploy the Gatling package (one-time) — blocked
+### A6. Deploy the Gatling package (one-time) — needs an API token
 
-Blocked on two unknowns (ask Graziano):
+The only thing missing is a **Gatling Enterprise API token**: the **Configure** role to
+deploy here, the **Start** role to trigger each trial (A6/Phase C). May be two tokens.
+Note this is a different credential from the `cpt_` control-plane token, which is already
+in place.
 
-- the **team name** for `.gatling/package.conf` — an unfilled placeholder; the deploy
-  fails until it is set
-- API token roles: **Configure** to deploy, **Start** to trigger each trial. May need two.
+**The team name is NOT needed.** `team` is optional in the package descriptor: omitted, the
+package goes to "the only team specified in the API Token", or "the only team in the
+organization if the API Token has a global role". The placeholder has been removed from
+`.gatling/package.conf` — leaving it would have failed, since it was a literal string.
+Set `team` explicitly only if the deploy reports the team as ambiguous.
 
 Needs Node, so from a dev machine, not toolbox:
 
@@ -274,9 +292,27 @@ the vLLM pack's (the `GPU` component type ships only metric names and units, no 
 
 ---
 
+## Changes made to other people's scripts
+
+Tracked here so they can be handed back to whoever owns the original. All are on branch
+`feat/gatling-enterprise-dedicated-cluster`.
+
+| File | Origin | Change | Why |
+|---|---|---|---|
+| `k8s/gatling-control-plane/job.json` | hhthacker, `924ff8b` | removed `spec.template.spec.restartPolicy: "Never"` (`c8fa778`) | The control plane validates this descriptor at boot and rejects the field — it sets the policy itself. With it present the container crash-looped and the private location never registered. Worth flagging upstream: `restartPolicy: Never` is mandatory in a normal Kubernetes Job, so this is a natural thing to write. |
+| `k8s/gatling-control-plane/install.sh` | hhthacker, `924ff8b` | every `kubectl` now goes through `$KUBECTL` with an explicit `--context`, default `lab-vllm-bench-gatling`, override `KUBE_CONTEXT` (`d3532c2`) | It used bare `kubectl` against namespace `llm-benchmark`, which exists on **both** clusters — so it would have installed the control plane wherever the current context pointed, succeeding silently. Only needed because this study runs on a second cluster; not a defect in the original single-cluster setting. |
+| `k8s/apply_config.sh` | Graziano, on `main` | same `$KUBECTL` + explicit `--context` treatment (`9f6c264`) | Same reason, higher stakes: run from toolbox, whose current context is the *old* cluster, it would have redeployed vLLM on top of another study's running experiment. |
+| `.gatling/package.conf` | hhthacker, `924ff8b` | removed the `team = "<your Gatling Enterprise team>"` placeholder | `team` is optional and inferred from the API token; the placeholder is a literal string and would have failed the deploy. |
+
+None of these are behaviour changes to the simulation or the study — they are cluster
+targeting and descriptor validity.
+
+---
+
 ## Open decisions
 
-- **Gatling team name and API token roles** — blocks A5 and A6.
+- **Gatling Enterprise API token** (Configure + Start roles) — blocks A6. The team
+  name turned out not to be needed.
 - **Merge this branch to `main`** once the run is proven.
 - **Rotate `akamas/id_rsa`.** It was committed to this public repo in August and, although
   the history was rewritten, GitHub still serves it at the orphaned commit to anonymous
