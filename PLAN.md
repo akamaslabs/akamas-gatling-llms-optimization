@@ -289,10 +289,20 @@ eksctl delete cluster --name vllm-bench-gatling --region us-east-2 --profile lab
 
 ## Risks
 
-**The reference run failed 6 trials out of 14.** `1-Goodput-Realistic-Load-Gatling`,
-FINISHED 2026-08-17, unexplained. The Enterprise path adds two new ways to fail (the 5%
-assertion and the `[DONE]` check), so whatever caused those 6 will likely cause more.
-Worth 20 minutes on that study's failed experiments before launching.
+**~~The reference run failed 6 trials out of 14.~~ Investigated — it did not fail
+anything.** The study listing's "# exp with errors: 6" counts experiments whose *goal
+constraints* were violated, not experiments that broke. All 21 experiments of
+`1-Goodput-Realistic-Load-Gatling` ran to completion; each of the six reports
+`status FINISHED — the trial has completed successfully` alongside
+`goal status CONSTRAINTS_VIOLATED`. The single `ABORTED` one (#21) is the study being
+stopped at the end. So there is no unexplained breakage to carry into this run.
+
+What the six *do* tell us is worth keeping: **all six violated the same constraint**,
+`TTFT P95 interactive-chat SLA` (`vLLM.time_to_first_token_p95 <= 1500`). Not one tripped
+the ITL constraint. Six of twenty experiments pushed past the TTFT ceiling while ITL never
+bound — which is exactly the sort of signal the plan's own note about those thresholds
+being unrecalibrated placeholders was waiting for. If the Enterprise run reproduces that
+asymmetry, TTFT is the threshold to revisit, and the 300 ms ITL limit is doing nothing.
 
 **Load-generator sizing is unverified** at 1024 concurrent closed-loop VUs on a JS event
 loop. The node was sized at 8 vCPU so the generator can go from 4 CPU to 6–7 without
