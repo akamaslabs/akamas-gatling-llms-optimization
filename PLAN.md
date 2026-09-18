@@ -68,7 +68,7 @@ unable to be re-run against the cluster it was measured on.
 ### Done
 
 A1 toolbox cluster access · A2 branch on toolbox · A3 monitoring stack ·
-A4 Prometheus exposed to Akamas · A5 Gatling control plane.
+A4 Prometheus exposed to Akamas · A5 Gatling control plane · A7 Akamas objects.
 
 ---
 
@@ -187,19 +187,39 @@ GATLING_ENTERPRISE_API_TOKEN=... bash k8s/deploy_enterprise.sh
 Then set on toolbox for user `akamas`: `GATLING_ENTERPRISE_API_TOKEN` (Start role) and
 `GATLING_SIMULATION_ID=test_...`.
 
-**Check they survive a non-interactive SSH**, which is how Akamas invokes them — a
-non-login shell does not source `~/.bashrc`:
+**Where to put them — measured on toolbox, not guessed.** Akamas opens a non-interactive
+SSH session, and probing it with dummy variables gave:
 
+| variable defined in | bare command (what Akamas does today) | wrapped in `bash -lc` |
+|---|---|---|
+| `~/.bashrc` | ❌ empty | ❌ empty |
+| `~/.profile` | ❌ empty | ✅ set |
+
+So **both** changes are needed, and either alone fails:
+
+1. put the two variables in **`~/.profile`** — not `~/.bashrc`, which is the natural
+   instinct and never works here (there is no `~/.bash_profile`, and `.profile` does not
+   source `.bashrc`)
+2. wrap the workflow's RunTest command as
+   `bash -lc "bash /work/.../run_test_enterprise.sh"`
+
+`/etc/environment` would avoid step 2 but is not writable by `akamas`, so it needs root
+on the toolbox image.
+
+Verify before the first run:
 ```bash
-ssh akamas@toolbox 'echo "[$GATLING_SIMULATION_ID]"'
+ssh akamas@toolbox 'bash -lc "echo [\$GATLING_SIMULATION_ID]"'
 ```
+Empty brackets means the study dies on its first RunTest.
 
-Empty brackets means the study dies on its first RunTest. Cleanest fix without touching
-the script: wrap the workflow command as `bash -lc "bash /work/.../run_test_enterprise.sh"`.
+### A7. Create the system, components, telemetry, workflow and study — ✅ DONE
 
-### A7. Create the system, components, telemetry, workflow and study
+All created on 2026-09-18 ✅. Study `1-Goodput-Realistic-Load-Gatling-Enterprise` is
+`CREATED`, bound to system `..._Gatling_Enterprise`, telemetry
+`Prometheus_1_Goodput_Realistic_Load_Gatling_Enterprise` pointing at the new cluster's NLB.
+Nothing here depends on the Gatling API token, so it was done ahead of A6.
 
-From the toolbox pod (the Akamas CLI does not work from a dev machine here). Order
+Run from the toolbox pod (the Akamas CLI does not work from a dev machine here). Order
 matters — components and telemetry reference the system, the study references both:
 
 ```bash
