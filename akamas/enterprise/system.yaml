@@ -1,0 +1,15 @@
+kind: system
+
+name: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling_Enterprise
+description: >-
+  Gatling ENTERPRISE variant of the goodput study — same model (Qwen2.5-7B-Instruct),
+  same single A10G, same goal/windowing/parametersSelection as
+  vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling. What differs is where it runs and how
+  load is generated: a dedicated throwaway cluster (vllm-bench-gatling), with the load
+  test driven by a Gatling Enterprise private location instead of a raw Kubernetes Job.
+
+  Deliberately a SEPARATE system rather than a reuse of the _Gatling one, following this
+  lab's one-system-per-study convention: components and telemetry instances belong to a
+  system, and this study's telemetry must point at a different cluster's Prometheus.
+  Sharing the system would mean repointing the August reference run's telemetry, leaving
+  that study unable to be re-run against the cluster it was measured on.

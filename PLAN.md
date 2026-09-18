@@ -37,17 +37,20 @@ eksctl scale nodegroup --cluster vllm-bench-gatling --region us-east-2 \
 
 Context `lab-vllm-bench`, namespace `akamas`, CLI only from the `toolbox` pod.
 
-This study has its **own** system, components and telemetry instance — in Akamas these
-belong to a system, so nothing is shared with any other study:
+This study gets its **own** system, components and telemetry instance, per this lab's
+one-system-per-study convention (16 systems exist, one per study). In Akamas components
+and telemetry instances belong to a system, so a separate system means a fully
+independent set:
 
-| | This study | The concurrently-running study, for contrast |
-|---|---|---|
-| system | `vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling` | `vLLM_Benchmark_15_Qwen3_30B_A3B` |
-| components | `container`, `gpu`, `vLLM` | `cluster`, `container`, `gpu0`…`gpu3`, … |
-| telemetry | `Prometheus_1_Goodput_Realistic_Load_Gatling` | `Prometheus_15_Qwen3_30B_A3B` |
+| | This study (**to create**, A7) | August reference run | Concurrently-running study |
+|---|---|---|---|
+| system | `..._Gatling_Enterprise` | `..._Gatling` | `vLLM_Benchmark_15_Qwen3_30B_A3B` |
+| telemetry → Prometheus on | `vllm-bench-gatling` (via NLB) | old cluster, in-cluster DNS | old cluster |
 
-Editing ours cannot affect theirs. Our telemetry instance's `address` still points at
-in-cluster DNS and is repointed in A4.
+Defined in `akamas/enterprise/` (system, components, telemetry) — a copy of `akamas/`
+bound to the new system name. **The August run's own objects are left untouched**: had we
+reused its system, repointing its telemetry at the new cluster would leave that study
+unable to be re-run against the cluster it was measured on.
 
 ### toolbox ✅
 
@@ -70,7 +73,7 @@ A1 toolbox cluster access · A2 branch on toolbox · A3 monitoring stack.
 
 ## Phase A — remaining, all doable with the GPU off
 
-### A4. Expose Prometheus to Akamas, repoint the telemetry instance
+### A4. Expose Prometheus to Akamas
 
 The one genuinely new piece of engineering: no equivalent exists in a single-cluster setup.
 
@@ -95,9 +98,10 @@ kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- \
 If it hangs or is refused, open the new cluster's node SG to the old cluster's node SG
 on 9090 — the NLB preserves the client IP in instance mode, so the node SG decides.
 
-Then set that hostname as `config.address` in `akamas/telemetry/prometheus.yaml` and
-re-apply. **To determine:** whether `akamas create` updates a telemetry instance in place
-or requires delete-then-create.
+Then set that hostname as `config.address` in
+`akamas/enterprise/telemetry/prometheus.yaml`, replacing the deliberately-invalid
+`REPLACE_WITH_NLB_HOSTNAME_SEE_PLAN_A4` placeholder. The instance itself is created in A7,
+so there is no update-in-place question to answer.
 
 ### A5. Gatling control plane
 
@@ -150,11 +154,17 @@ ssh akamas@toolbox 'echo "[$GATLING_SIMULATION_ID]"'
 Empty brackets means the study dies on its first RunTest. Cleanest fix without touching
 the script: wrap the workflow command as `bash -lc "bash /work/.../run_test_enterprise.sh"`.
 
-### A7. Create the workflow and the study
+### A7. Create the system, components, telemetry, workflow and study
 
-From the toolbox pod (the Akamas CLI does not work from a dev machine here):
+From the toolbox pod (the Akamas CLI does not work from a dev machine here). Order
+matters — components and telemetry reference the system, the study references both:
 
 ```bash
+akamas create -f akamas/enterprise/system.yaml
+akamas create -f akamas/enterprise/components/container.yaml
+akamas create -f akamas/enterprise/components/gpu.yaml
+akamas create -f akamas/enterprise/components/vllm.yaml
+akamas create -f akamas/enterprise/telemetry/prometheus.yaml   # after A4 fills in address
 akamas create -f akamas/1-Goodput-Realistic-Load-Gatling-Enterprise-Workflow.yaml
 akamas create -f akamas/1-Goodput-Realistic-Load-Gatling-Enterprise.yaml
 ```

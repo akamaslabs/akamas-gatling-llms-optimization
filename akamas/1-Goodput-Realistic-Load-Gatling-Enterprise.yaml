@@ -9,7 +9,7 @@ kind: study
 # it; to fall back, point a study at 1-Goodput-Realistic-Load-Gatling-Workflow.
 
 name: 1-Goodput-Realistic-Load-Gatling-Enterprise
-system: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling
+system: vLLM_Benchmark_1_Goodput_Realistic_Load_Gatling_Enterprise
 workflow: 1-Goodput-Realistic-Load-Gatling-Enterprise-Workflow
 
 # goal/windowing/parametersSelection/parameterConstraints/steps below are copied
