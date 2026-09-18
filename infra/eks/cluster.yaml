@@ -74,10 +74,28 @@ managedNodeGroups:
   # leaving room to raise the generator to 6-7 CPU without reprovisioning. That headroom
   # is deliberate: generator sizing is NOT verified at 1024 concurrent closed-loop VUs
   # on a JS event loop (see PLAN.md "Known caveat").
+  # CHANGE 4 — pinned to ONE availability zone, and minSize 0.
+  #
+  # `availabilityZones` restricts this group to us-east-2c. Without it the group spans all
+  # three AZs of the shared VPC, and that breaks scale-to-zero: Prometheus' and Grafana's
+  # PersistentVolumes are EBS, which is AZ-bound, so scaling back up lands the node in the
+  # right AZ only 1 time in 3. The other 2, those pods sit Pending forever on
+  # `volume node affinity conflict` — an error that never self-heals and reads like a
+  # generic scheduling problem. Nothing here needs multi-AZ: it is one node with one
+  # replica of everything, and the cluster is disposable.
+  #
+  # minSize 0 so the group can actually be scaled to zero between working sessions
+  # (~$0.38/h saved; the internal NLB and the 30Gi of EBS keep costing ~$0.03/h).
+  #   down: eksctl scale nodegroup --cluster vllm-bench-gatling --region us-east-2 \
+  #           --name system --nodes 0 --nodes-min 0 --profile lab
+  #   up:   ... --nodes 1 --nodes-min 1
+  # The NLB survives a scale-to-zero — the Service is untouched, so its hostname stays
+  # valid in the Akamas telemetry instance and the node re-registers as a target.
   - name: system
     instanceType: m6i.2xlarge
+    availabilityZones: ["us-east-2c"]
     desiredCapacity: 1
-    minSize: 1
+    minSize: 0
     maxSize: 1
     volumeSize: 100
     labels:
@@ -89,8 +107,14 @@ managedNodeGroups:
   # identical is what lets this study reuse that run's parameter domains, the
   # 1500ms/300ms SLA thresholds and its baseline without recalibration (PLAN.md). Do not
   # "upgrade" this to a newer GPU without redoing that calibration.
+  # Pinned to the same AZ as `system` for a reason beyond storage: the load generator runs
+  # on the system node and vLLM runs here, so a cross-AZ split would add inter-AZ network
+  # latency to every request — straight into the TTFT and ITL percentiles this study
+  # optimises against. Same zone keeps that variable out of the measurement. (Both nodes
+  # happened to land in us-east-2c on the first provision; this makes it deterministic.)
   - name: llm-serving
     instanceType: g5.2xlarge
+    availabilityZones: ["us-east-2c"]
     desiredCapacity: 1
     minSize: 0
     maxSize: 1

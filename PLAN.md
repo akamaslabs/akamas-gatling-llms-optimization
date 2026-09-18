@@ -18,20 +18,39 @@ kubectl context `lab-vllm-bench-gatling`. Built by `infra/eks/provision.sh` from
 
 | | |
 |---|---|
-| node `system` | `m6i.2xlarge`, 7910m CPU / ~30 GiB allocatable — **UP** |
-| nodegroup `llm-serving` | `g5.2xlarge` (1× A10G), **desired capacity 0** — scaled down to stop billing |
+| nodegroup `system` | `m6i.2xlarge`, 7910m CPU / ~30 GiB — **scaled to 0** between sessions |
+| nodegroup `llm-serving` | `g5.2xlarge` (1× A10G) — **scaled to 0** |
 | namespaces | `llm-serving`, `llm-benchmark`, `monitoring` |
 | StorageClasses | `gp3` (default, Retain), `gp3-ephemeral` (Delete) |
 | monitoring | kube-prometheus-stack 91.4.1 + dcgm-exporter 4.8.3, all targets `up` ✅ |
 | VPC | shared with `vllm-bench` (`vpc-098d70b16dd296bf3`) so Akamas can reach it privately |
 
-Cost: ~$0.38/h with the GPU node down, ~$1.60/h with it up.
+Cost: **~$0.03/h** with both nodegroups at zero (just the internal NLB and 30 GiB of EBS),
+~$0.38/h with `system` up, ~$1.60/h with the GPU up too.
 
 ```bash
-# GPU node up / down
+# bring a nodegroup back — <name> is `system` or `llm-serving`
 eksctl scale nodegroup --cluster vllm-bench-gatling --region us-east-2 \
-  --name llm-serving --nodes 1 --profile lab
+  --name <name> --nodes 1 --nodes-min 1 --profile lab
+# and down again
+eksctl scale nodegroup --cluster vllm-bench-gatling --region us-east-2 \
+  --name <name> --nodes 0 --nodes-min 0 --profile lab
 ```
+
+`--nodes-min` is not optional in either direction: `minSize` had to drop to 0 to allow the
+scale-down, so it must be raised again on the way up.
+
+**Both nodegroups are pinned to `us-east-2c`**, which is what makes scale-to-zero safe.
+Prometheus' and Grafana's PersistentVolumes are EBS and therefore AZ-bound; with the group
+spanning all three AZs of the shared VPC, scaling back up landed in the right zone only
+1 time in 3, and the other 2 left those pods Pending forever on `volume node affinity
+conflict` — an error that never self-heals and reads like ordinary scheduling trouble.
+Pinning also keeps the load generator (on `system`) and vLLM (on `llm-serving`) in one
+zone, so no inter-AZ hop inflates the TTFT/ITL percentiles this study optimises against.
+
+Nothing else is needed to come back up: the NLB Service is untouched, so its hostname stays
+valid in the Akamas telemetry instance and the node re-registers as a target by itself. The
+Gatling control plane re-registers on restart too.
 
 ### Akamas — on the old cluster ✅
 
