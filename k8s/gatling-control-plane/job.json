@@ -28,8 +28,7 @@
               }
             }
           }
-        ],
-        "restartPolicy": "Never"
+        ]
       }
     },
     "ttlSecondsAfterFinished": 60
