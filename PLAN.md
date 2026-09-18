@@ -40,13 +40,32 @@ eksctl scale nodegroup --cluster vllm-bench-gatling --region us-east-2 \
 `--nodes-min` is not optional in either direction: `minSize` had to drop to 0 to allow the
 scale-down, so it must be raised again on the way up.
 
-**Both nodegroups are pinned to `us-east-2c`**, which is what makes scale-to-zero safe.
-Prometheus' and Grafana's PersistentVolumes are EBS and therefore AZ-bound; with the group
-spanning all three AZs of the shared VPC, scaling back up landed in the right zone only
-1 time in 3, and the other 2 left those pods Pending forever on `volume node affinity
-conflict` — an error that never self-heals and reads like ordinary scheduling trouble.
-Pinning also keeps the load generator (on `system`) and vLLM (on `llm-serving`) in one
-zone, so no inter-AZ hop inflates the TTFT/ITL percentiles this study optimises against.
+⚠️ **Check the node's AZ after scaling `system` back up.** Prometheus' and Grafana's
+PersistentVolumes are EBS and therefore bound to **us-east-2c**, but the nodegroup spans all
+three AZs of the shared VPC — so a scale-up lands in the right zone only 1 time in 3. The
+other 2 leave those two pods Pending forever on `volume node affinity conflict`, an error
+that never self-heals and reads like ordinary scheduling trouble.
+
+```bash
+kubectl --context=lab-vllm-bench-gatling get nodes -L topology.kubernetes.io/zone
+```
+
+If it is not `us-east-2c`, either scale down and up again to re-roll, or — since there is
+no experiment data worth keeping yet — delete the two PVCs in `monitoring` and
+`helm upgrade` the stack so they are recreated in whatever zone the node landed in.
+
+`infra/eks/cluster.yaml` now pins both groups with `availabilityZones: ["us-east-2c"]`, so
+a rebuilt cluster does not have this problem. **It cannot be applied to the running
+cluster**: a managed nodegroup owns its ASG, and narrowing the ASG's subnets by hand was
+tried and rejected — EKS flagged `AutoScalingGroupInvalidConfiguration` and put the group
+in `DEGRADED`. It has been reverted; the health record may stay stale until the next
+scaling event. Pinning a live managed nodegroup means replacing it
+(`eksctl delete nodegroup` + `create -f cluster.yaml`), which is worth doing only if the
+scale-up roulette becomes annoying.
+
+The AZ pin in the manifest has a second, independent reason: the load generator runs on
+`system` and vLLM on `llm-serving`, so a cross-AZ split adds an inter-AZ hop to every
+request, landing straight in the TTFT/ITL percentiles this study optimises against.
 
 Nothing else is needed to come back up: the NLB Service is untouched, so its hostname stays
 valid in the Akamas telemetry instance and the node re-registers as a target by itself. The
