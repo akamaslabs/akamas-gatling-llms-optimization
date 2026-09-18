@@ -56,9 +56,10 @@ here (see Risks).
 in-cluster DNS on the old cluster and must be repointed at the new cluster's Prometheus
 (step A4). Theirs stays untouched.
 
-Missing, to be created: the Enterprise **workflow** and the Enterprise **study**.
-(`akamas/1-Goodput-Realistic-Load-Gatling-Enterprise.yaml` exists locally, untracked.
-Its workflow file lives only on the `feat/enterprise-private-locations` branch.)
+Missing, still to be created on the Akamas server: the Enterprise **workflow** and the
+Enterprise **study** (step A7). Both YAMLs are now on branch
+`feat/gatling-enterprise-dedicated-cluster` and present on toolbox ✅, so A7 only needs
+the two `akamas create` calls.
 
 ### The reference run
 
@@ -69,9 +70,9 @@ readily, not less.
 
 ---
 
-## The blocker
+## The blocker — ✅ resolved by A1 + A2, kept because it explains why they exist
 
-**toolbox can only talk to the old cluster.** ✅ Verified: its only kubectl context is
+**toolbox could only talk to the old cluster.** Verified at the time: its only kubectl context was
 `default` → cluster `in-cluster` → the ServiceAccount `akamas`, and that SA is
 effectively cluster-admin there (`kubectl auth can-i '*' '*'` → yes).
 
@@ -158,19 +159,27 @@ kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- kubectl get no
 kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- kubectl --context gatling get nodes -L node-role
 ```
 
-### A2. Get the branch onto toolbox — ⚠️ PARTIAL
+### A2. Get the branch onto toolbox — ✅ DONE
 
 toolbox is now on `feat/enterprise-private-locations` at `1ec4a08` ✅, which brings every
 Enterprise file it needs: `run_test_enterprise.sh`, `deploy_enterprise.sh`,
 `.gatling/package.conf`, all of `k8s/gatling-control-plane/`, the Enterprise workflow
 YAML, and `01-deployment_template.yaml` ✅.
 
-Our own branch `feat/gatling-enterprise-dedicated-cluster` (commit `9f6c264`) could **not**
-be pushed: `stefanocereda` has only `pull` on this repo — org membership alone grants no
-repo access, and no commit here was ever authored by them. Waiting on an admin (Graziano)
-to grant Write.
+toolbox is now on **our** branch `feat/gatling-enterprise-dedicated-cluster` at `02fe36a` ✅,
+so everything it needs is in place. Verified functionally on toolbox: the two lines
+`apply_config.sh` uses resolve to the NEW cluster's single `system` node and its
+`llm-serving` namespace, while a bare `kubectl` still returns the OLD cluster's 3 nodes ✅.
 
-**Three things are therefore still missing on toolbox, and two of them are blocking:**
+Getting there needed a GitHub permission fix. `stefanocereda` initially had only `pull`:
+org membership alone grants no repo access, and no commit here had ever been authored by
+them. After an admin granted Write (now `maintain: true, push: true`) the branch pushed
+fine. Note the *first* failure was a different, unrelated problem — an expired token in
+`pass` at `dev/github`, which returned `401 Bad credentials`; the permission issue only
+surfaced as a `403` afterwards.
+
+**What had been missing on toolbox before our branch landed** (kept for the record —
+all three are now resolved):
 
 1. ~~**`akamas/id_rsa`**~~ — ✅ RESOLVED. Restored from history and verified: `ssh -i` on
    port 2222 authenticates to toolbox as `akamas`. It was deleted by the branch switch: it
