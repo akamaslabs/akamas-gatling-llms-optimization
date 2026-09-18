@@ -46,7 +46,7 @@ independent set:
 |---|---|---|---|
 | system | `..._Gatling_Enterprise` | `..._Gatling` | `vLLM_Benchmark_15_Qwen3_30B_A3B` |
 | telemetry → Prometheus on | `vllm-bench-gatling` (via NLB) | old cluster, in-cluster DNS | old cluster |
-
+  
 Defined in `akamas/enterprise/` (system, components, telemetry) — a copy of `akamas/`
 bound to the new system name. **The August run's own objects are left untouched**: had we
 reused its system, repointing its telemetry at the new cluster would leave that study
@@ -73,9 +73,26 @@ A1 toolbox cluster access · A2 branch on toolbox · A3 monitoring stack.
 
 ## Phase A — remaining, all doable with the GPU off
 
-### A4. Expose Prometheus to Akamas
+### A4. Expose Prometheus to Akamas — ✅ DONE
 
-The one genuinely new piece of engineering: no equivalent exists in a single-cluster setup.
+Internal NLB `a2e152afd47944cd6a9e3b27dcc70180-de2ee87c41d70dfd.elb.us-east-2.amazonaws.com`,
+`Scheme: internal` on the three private subnets ✅, reachable from the toolbox pod on the
+old cluster: `HTTP 200`, query round-trip ~64 ms ✅. Its hostname is now
+`config.address` in `akamas/enterprise/telemetry/prometheus.yaml`.
+
+**Cross-zone load balancing had to be enabled** — it is off by default and this is not an
+optimisation. An NLB puts one node in every subnet it is given (three AZs here), but with
+cross-zone off each node only reaches targets in its own AZ, and this cluster has a single
+worker in one AZ. Two of the three NLB IPs therefore had no reachable target; DNS
+round-robins across all three, so a client landing on a dead one stalled ~7 s
+retransmitting SYNs before failing over. Measured from toolbox before the fix: connect
+times of 7.50 / 0.003 / 0.002 / 5.00 / 7.50 s. After:
+1.6–5 ms. The annotation is in `k8s/monitoring/prometheus-internal-lb.yaml`.
+
+If the cluster is ever rebuilt, this is the first thing to re-check — it looks like it
+works, just slowly and erratically, which is worse than an outright failure.
+
+#### How it was done
 
 ```bash
 kubectl --context=lab-vllm-bench-gatling apply -f k8s/monitoring/prometheus-internal-lb.yaml

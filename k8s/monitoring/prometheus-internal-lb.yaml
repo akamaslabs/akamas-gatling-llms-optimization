@@ -34,6 +34,16 @@ metadata:
     # If the LB controller is ever added to this cluster, switch to its annotations.
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    # REQUIRED here, not an optimisation. An NLB places one node in every subnet it is
+    # given — three AZs for this VPC — but cross-zone load balancing is OFF by default,
+    # so an NLB node can only reach targets in its OWN availability zone. This cluster
+    # has a single worker, in one AZ, so two of the three NLB IPs have no reachable
+    # target. DNS round-robins across all three, and a client that lands on a dead one
+    # stalls ~7s retransmitting SYNs before failing over to the next address.
+    # Measured before enabling this: connect times of 7.50s / 0.003s / 0.002s / 5.00s /
+    # 7.50s from toolbox. Akamas polls Prometheus on every metric of every trial, so
+    # that is the difference between working telemetry and random multi-second stalls.
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
 spec:
   type: LoadBalancer
   selector:

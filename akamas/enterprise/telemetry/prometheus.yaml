@@ -20,7 +20,7 @@ config:
   #
   # Left deliberately invalid so a forgotten substitution fails loudly instead of
   # silently collecting nothing:
-  address: REPLACE_WITH_NLB_HOSTNAME_SEE_PLAN_A4
+  address: a2e152afd47944cd6a9e3b27dcc70180-de2ee87c41d70dfd.elb.us-east-2.amazonaws.com
   port: 9090
   logLevel: DETAILED
   duration: 30
