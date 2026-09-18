@@ -120,22 +120,24 @@ Then set that hostname as `config.address` in
 `REPLACE_WITH_NLB_HOSTNAME_SEE_PLAN_A4` placeholder. The instance itself is created in A7,
 so there is no update-in-place question to answer.
 
-### A5. Gatling control plane
+### A5. Gatling control plane — NOT blocked
 
-Blocked on two unknowns (ask Graziano):
+Needs only the `cpt_` control-plane token ✅: `install.sh` checks for the Secret and
+nothing else, and `control-plane.conf` references no team and no API token. The team name
+and the Configure/Start token roles belong to **A6**, not here.
 
-- the **team name** for `.gatling/package.conf` — an unfilled placeholder; package deploy
-  fails until it is set
-- API token roles: **Configure** to deploy, **Start** to trigger each trial. May need two.
-
-The control plane token we have. It was passed as 400 characters — that is the same
-200-character token pasted twice ✅. Use **one half**.
+The token was passed as 400 characters — that is the same 200-character token pasted
+twice ✅. Use **one half**.
 
 ```bash
 kubectl --context=lab-vllm-bench-gatling create secret generic gatling-control-plane-token \
   -n llm-benchmark --from-literal=token="cpt_..."      # 200 chars, not 400
-bash k8s/gatling-control-plane/install.sh
+bash k8s/gatling-control-plane/install.sh              # KUBE_CONTEXT=... to override
 ```
+
+`install.sh` now targets an explicit context (default `lab-vllm-bench-gatling`) rather
+than whatever happens to be current — `llm-benchmark` exists on both clusters, so a bare
+`kubectl` would install the control plane wherever the context pointed, without error.
 
 `install.sh` refuses to run without the Secret. Then confirm `prl_akamas_vllm_k8s` appears
 under Admin → Private Locations in the Gatling UI; if it does not register, nothing
@@ -144,7 +146,13 @@ downstream works.
 `deployment.yaml` and `job.json` both select `node-role: system`, which matches this
 cluster ✅ — the reason the combined node kept that label.
 
-### A6. Deploy the Gatling package (one-time)
+### A6. Deploy the Gatling package (one-time) — blocked
+
+Blocked on two unknowns (ask Graziano):
+
+- the **team name** for `.gatling/package.conf` — an unfilled placeholder; the deploy
+  fails until it is set
+- API token roles: **Configure** to deploy, **Start** to trigger each trial. May need two.
 
 Needs Node, so from a dev machine, not toolbox:
 
