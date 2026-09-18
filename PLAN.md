@@ -158,7 +158,62 @@ kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- kubectl get no
 kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- kubectl --context gatling get nodes -L node-role
 ```
 
-### A2. Get the branch onto toolbox
+### A2. Get the branch onto toolbox — ⚠️ PARTIAL
+
+toolbox is now on `feat/enterprise-private-locations` at `1ec4a08` ✅, which brings every
+Enterprise file it needs: `run_test_enterprise.sh`, `deploy_enterprise.sh`,
+`.gatling/package.conf`, all of `k8s/gatling-control-plane/`, the Enterprise workflow
+YAML, and `01-deployment_template.yaml` ✅.
+
+Our own branch `feat/gatling-enterprise-dedicated-cluster` (commit `9f6c264`) could **not**
+be pushed: `stefanocereda` has only `pull` on this repo — org membership alone grants no
+repo access, and no commit here was ever authored by them. Waiting on an admin (Graziano)
+to grant Write.
+
+**Three things are therefore still missing on toolbox, and two of them are blocking:**
+
+1. ~~**`akamas/id_rsa`**~~ — ✅ RESOLVED. Restored from history and verified: `ssh -i` on
+   port 2222 authenticates to toolbox as `akamas`. It was deleted by the branch switch: it
+   was a
+   *tracked* file at `b3b6798` (the commit toolbox sat on) and is untracked from `3bb4ad8`
+   onward (the security scrub), so checking out the Enterprise branch removed it. Every
+   workflow task authenticates with it at
+   `/work/akamas-gatling-llms-optimization/akamas/id_rsa`; without it every task fails to
+   SSH. Restore from history:
+   ```bash
+   kubectl --context=lab-vllm-bench -n akamas exec deploy/toolbox -- bash -lc \
+     'cd /work/akamas-gatling-llms-optimization && \
+      git show b3b6798:akamas/id_rsa > akamas/id_rsa && chmod 600 akamas/id_rsa'
+   ```
+   Note it is now gitignored, so once restored it survives further branch switches.
+
+   Two gotchas met while verifying, worth recording:
+   - **The file has no trailing newline**, so the OpenSSH *CLI* rejects it with
+     `Load key: error in libcrypto`. That is not a corrupt key — it is byte-identical to
+     the copies every other study uses, including the one running right now, and Akamas'
+     own SSH library accepts it. Do not "fix" it; verify with a newline-added *copy*
+     instead, which authenticates fine.
+   - toolbox's sshd listens on **port 2222**, not 22 (the `toolbox` Service maps 22 → it).
+     Any manual `ssh` test needs `-p 2222`.
+
+   Side note, pre-existing and not fixed by the scrub: the key is still retrievable from
+   git history at `b3b6798` — untracking removed it from the tip, not from the past, and
+   `main` was force-pushed so that commit is now orphaned but still in local object
+   stores. The key should be rotated at some point.
+
+2. **`k8s/apply_config.sh` has no `--context`** — the A1 fix lives only on our unpushed
+   branch. Until it lands, the copy on toolbox targets whatever context is current, i.e.
+   the **old** cluster. **Do not start the study before this is on toolbox**: the first
+   trial would reconfigure the vLLM another study is measuring, and would succeed quietly
+   while doing it.
+
+3. `akamas/1-Goodput-Realistic-Load-Gatling-Enterprise.yaml` (the study definition) is
+   also only on our branch — needed for A7, not before.
+
+`k8s/monitoring/` is likewise absent there, but that is fine: the helm commands in A3 run
+from a dev machine against `--context lab-vllm-bench-gatling`, not from toolbox.
+
+#### Original notes
 
 toolbox's checkout is at `/work/akamas-gatling-llms-optimization`, currently on **`main`**
 at `b3b6798` ✅ — behind local `main` and missing the Enterprise files entirely.
@@ -168,7 +223,35 @@ only on `feat/enterprise-private-locations`. Either merge that branch to `main` 
 it out at that path on toolbox. Also push the currently-untracked local work (`infra/`,
 `k8s/monitoring/`, the Enterprise study YAML) so toolbox can see it.
 
-### A3. Monitoring stack on the new cluster
+### A3. Monitoring stack on the new cluster — ✅ DONE
+
+Done 2026-09-18, run from a dev machine with `--kube-context=lab-vllm-bench-gatling`
+(not from toolbox — these need only helm + the files in this repo).
+
+- `kube-prometheus-stack` 91.4.1 (Prometheus operator v0.94.0) — **deployed** ✅.
+  6 pods Running, all on the `system` node: Prometheus, Grafana, alertmanager,
+  operator, kube-state-metrics, node-exporter.
+- `dcgm-exporter` 4.8.3 — **deployed** ✅, DaemonSet at **0/0** with
+  `nodeSelector node-role=llm-serving`. Correct, not a failure: the GPU node is scaled
+  to zero. It will schedule the moment that node comes back.
+- `servicemonitor.yaml` (vLLM) applied ✅ — 15 ServiceMonitors total.
+- PVCs **Bound**: Grafana 10Gi, Prometheus 20Gi, both on `gp3` ✅. This also proves the
+  EBS CSI driver's IRSA role works end to end, which was the open question from the
+  provisioning warnings.
+- Prometheus reports **Ready**, and **every active target is `up`** — 0 down ✅.
+
+The `vllm` and `dcgm-exporter` jobs are absent from the target list so far, as expected:
+no vLLM pod and no GPU node yet. Both appear in Phase B.
+
+**Ordering gotcha:** install kube-prometheus-stack *before* dcgm-exporter. DCGM's chart
+creates a `ServiceMonitor`, so without the Prometheus operator CRDs it fails with
+`no matches for kind "ServiceMonitor"`. Hit here; retried after the CRDs landed.
+
+Note `values-kube-prometheus.yaml` still carries `grafana.adminPassword: "changeme"`,
+inherited from the source study. Harmless while Grafana is only reachable in-cluster —
+change it if Grafana is ever exposed.
+
+#### Commands
 
 ```bash
 # DCGM exporter
