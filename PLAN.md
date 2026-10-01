@@ -360,6 +360,67 @@ the vLLM pack's (the `GPU` component type ships only metric names and units, no 
 
 ---
 
+## BLOCKER: the JS engine does not start on the certified image
+
+Found 2026-10-01 while smoke-testing the Enterprise path. Everything up to the load
+generator works; the generator itself dies ~7 s after `Starting simulation...`, before a
+single request, reproducibly across five runs:
+
+```
+[ERROR] i.g.a.Gatling$ - Failed to create the Simulation instance
+org.graalvm.polyglot.PolyglotException: java.lang.AssertionError:
+    Compiler initialization failed cannot continue.
+  at com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime.bypassedReservedOop
+  at io.gatling.js.JsSimulationHelper.loadSimulation
+```
+
+GraalJS cannot initialise its Truffle compiler inside the generator pod. The log is only
+in `/opt/gatling/mnt-script/load_generator.log` inside the container — stdout stops at
+`Starting simulation...`, and the control plane deletes the Job as soon as the run stops,
+so it has to be read by exec'ing into the live pod during its ~7 s lifetime.
+
+**What this is not**, each ruled out by test:
+
+| hypothesis | result |
+|---|---|
+| `prompts.json` not shipped | ❌ present in `target/package.zip`, 4.2 MB |
+| feeder path wrong | ❌ `jsonFile("prompts.json")` resolves from classpath root, where it is |
+| the simulation itself | ❌ runs clean locally: 5 requests, 5 OK, 0 KO, assertion passes |
+| in-cluster DNS | ❌ vLLM answers in 5 ms from the `llm-benchmark` namespace |
+| node capacity | ❌ 7 of 8 CPUs free |
+| **container resource limits** | ❌ **same failure with `limits` removed entirely** |
+| pin an older Java | ❌ not possible — see below |
+
+The configuration is not wrong: per the Kubernetes private-location reference, *"For the
+`javascript` engine, only the latest Java version is supported, which corresponds to the
+GraalVM version used to run Gatling with JavaScript."* So `java = latest` is the only legal
+value, and it currently resolves to GraalVM CE 25.3.4.1 / JDK 25, where Truffle fails to
+start. Locally the same simulation runs on plain OpenJDK 21 and is fine — this is the
+runtime, not the code.
+
+**This is Gatling-side.** Raised with the Gatling contact, whose own smoke run used a
+*managed* location and therefore never exercised this image.
+
+### Fallback, if it is not fixed quickly
+
+Point the study's `workflow:` at `1-Goodput-Realistic-Load-Gatling-Workflow` — the raw
+Kubernetes Job path that produced the August reference run. Verified still viable:
+`k8s/job.yaml` selects `node-role: system`, which matches this cluster ✅, and the GHCR
+image is public and present ✅. It needs three things first:
+
+1. create the `gatling-results` PVC (`k8s/00-pvc.yaml`), deliberately skipped for the
+   Enterprise path
+2. give `k8s/run_test_gatling.sh` the same explicit `--context` treatment as
+   `apply_config.sh` — it has 5 bare `kubectl` calls and would otherwise drive the wrong
+   cluster
+3. re-create the study pointing at that workflow
+
+The simulation, the sweep and the scoring are identical either way; only how the generator
+pod is created differs. Results would come from the `gatling-results` PVC rather than the
+Enterprise dashboards, which is a loss for the slides but not for the study.
+
+---
+
 ## Changes made to other people's scripts
 
 Tracked here so they can be handed back to whoever owns the original. All are on branch
