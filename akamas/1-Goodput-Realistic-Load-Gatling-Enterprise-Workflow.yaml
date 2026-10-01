@@ -58,10 +58,18 @@ tasks:
         hostname: toolbox
         username: akamas
         key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
-      # `bash -lc` is REQUIRED, not cosmetic. run_test_enterprise.sh needs
-      # GATLING_ENTERPRISE_API_TOKEN and GATLING_SIMULATION_ID, and Akamas invokes this
-      # over a non-interactive SSH session. Measured on toolbox: a bare command sees
-      # neither ~/.bashrc nor ~/.profile; `bash -lc` sources ~/.profile but still not
-      # ~/.bashrc. So the two variables live in ~/.profile AND the command is wrapped —
-      # either one alone and the script dies on its first `: "${VAR:?}"` guard.
-      command: bash -lc "bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh"
+      # The env file is sourced explicitly, and it lives on /work, for two separate
+      # reasons — both measured on toolbox, neither obvious:
+      #
+      # 1. Akamas invokes this over a NON-INTERACTIVE SSH session, which sources neither
+      #    ~/.bashrc nor ~/.profile. (`bash -lc` would pick up ~/.profile but still not
+      #    ~/.bashrc — the place everyone reaches for first.)
+      # 2. ~/.profile is a plain file on the container's overlay filesystem, unlike
+      #    ~/.kube which is a symlink to the /work PVC. toolbox has restarted twice
+      #    already; anything written to ~/ is lost on the next one. Sourcing from /work
+      #    survives restarts.
+      #
+      # Without both, run_test_enterprise.sh dies on its first `: "${VAR:?}"` guard —
+      # and in case 2 it would do so mid-study, hours in.
+      # Create the file with: see PLAN.md step A6.
+      command: bash -lc "set -a; . /work/.gatling-env; set +a; bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh"
