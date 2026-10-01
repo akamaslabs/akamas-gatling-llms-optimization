@@ -58,4 +58,10 @@ tasks:
         hostname: toolbox
         username: akamas
         key: /work/akamas-gatling-llms-optimization/akamas/id_rsa
-      command: bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh
+      # `bash -lc` is REQUIRED, not cosmetic. run_test_enterprise.sh needs
+      # GATLING_ENTERPRISE_API_TOKEN and GATLING_SIMULATION_ID, and Akamas invokes this
+      # over a non-interactive SSH session. Measured on toolbox: a bare command sees
+      # neither ~/.bashrc nor ~/.profile; `bash -lc` sources ~/.profile but still not
+      # ~/.bashrc. So the two variables live in ~/.profile AND the command is wrapped —
+      # either one alone and the script dies on its first `: "${VAR:?}"` guard.
+      command: bash -lc "bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh"
