@@ -1,0 +1,6 @@
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+X-triton-tuned-v1-r2     192   0.108    116.4      1949       3339   +0%/+6%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v1     218   0.109    116.4      1945       3352   -0%/+5%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2-r2     231   0.107    116.4      1954       3362   +1%/+6%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2     197   0.108    116.4      1772       3347   +1%/-4%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true

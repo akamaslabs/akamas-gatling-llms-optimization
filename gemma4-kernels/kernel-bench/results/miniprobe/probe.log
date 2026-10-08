@@ -1,0 +1,66 @@
+=== B-default: MOE_BACKEND=triton (15:10:05)
+(APIServer pid=1) INFO 10-08 15:10:55 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:11:15 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:11:15 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=92) INFO 10-08 15:11:15 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=92) INFO 10-08 15:13:25 [model_runner.py:404] Model loading took 24.72 GiB memory and 129.960661 seconds
+(EngineCore pid=92) INFO 10-08 15:13:35 [gpu_worker.py:625] Available KV cache memory: 14.51 GiB
+(EngineCore pid=92) INFO 10-08 15:13:35 [kv_cache_utils.py:2032] GPU KV cache size: 68,913 tokens, Maximum concurrency for 4,096 tokens per request: 16.82x
+(EngineCore pid=92) WARNING 10-08 15:13:28 [fused_moe.py:1167] Using default MoE config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json
+statefulset.apps/vllm scaled
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+=== X-triton-tuned-v1: MOE_BACKEND=triton TUNED_MOE_CONFIGS=true (15:16:51)
+(APIServer pid=1) INFO 10-08 15:17:42 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 15:18:02 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 15:18:02 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=93) INFO 10-08 15:18:02 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=93) INFO 10-08 15:19:26 [model_runner.py:404] Model loading took 24.72 GiB memory and 85.013868 seconds
+(EngineCore pid=93) INFO 10-08 15:19:38 [gpu_worker.py:625] Available KV cache memory: 14.51 GiB
+(EngineCore pid=93) INFO 10-08 15:19:38 [kv_cache_utils.py:2032] GPU KV cache size: 68,913 tokens, Maximum concurrency for 4,096 tokens per request: 16.82x
+statefulset.apps/vllm scaled
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+X-triton-tuned-v1     218   0.109    116.4      1945       3352   -0%/+5%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+=== X-triton-tuned-v2: MOE_BACKEND=triton TUNED_MOE_CONFIGS=true (15:22:59)
+(APIServer pid=1) INFO 10-08 15:23:51 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:24:10 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=92) INFO 10-08 15:24:11 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:24:11 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=92) INFO 10-08 15:25:19 [model_runner.py:404] Model loading took 24.72 GiB memory and 68.884149 seconds
+(EngineCore pid=92) INFO 10-08 15:25:30 [gpu_worker.py:625] Available KV cache memory: 14.51 GiB
+(EngineCore pid=92) INFO 10-08 15:25:30 [kv_cache_utils.py:2032] GPU KV cache size: 68,913 tokens, Maximum concurrency for 4,096 tokens per request: 16.82x
+statefulset.apps/vllm scaled
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+X-triton-tuned-v1     218   0.109    116.4      1945       3352   -0%/+5%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2     197   0.108    116.4      1772       3347   +1%/-4%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+=== X-triton-tuned-v2-r2: MOE_BACKEND=triton TUNED_MOE_CONFIGS=true (15:29:48)
+(APIServer pid=1) INFO 10-08 15:30:53 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 15:31:13 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 15:31:13 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=93) INFO 10-08 15:31:13 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=93) INFO 10-08 15:32:33 [model_runner.py:404] Model loading took 24.72 GiB memory and 80.068716 seconds
+(EngineCore pid=93) INFO 10-08 15:32:44 [gpu_worker.py:625] Available KV cache memory: 14.51 GiB
+(EngineCore pid=93) INFO 10-08 15:32:44 [kv_cache_utils.py:2032] GPU KV cache size: 68,913 tokens, Maximum concurrency for 4,096 tokens per request: 16.82x
+statefulset.apps/vllm scaled
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+X-triton-tuned-v1     218   0.109    116.4      1945       3352   -0%/+5%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2-r2     231   0.107    116.4      1954       3362   +1%/+6%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2     197   0.108    116.4      1772       3347   +1%/-4%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+=== X-triton-tuned-v1-r2: MOE_BACKEND=triton TUNED_MOE_CONFIGS=true (15:36:13)
+(APIServer pid=1) INFO 10-08 15:37:06 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:37:25 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=92) INFO 10-08 15:37:26 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 15:37:26 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=92) INFO 10-08 15:38:35 [model_runner.py:404] Model loading took 24.72 GiB memory and 70.048023 seconds
+(EngineCore pid=92) INFO 10-08 15:38:44 [gpu_worker.py:625] Available KV cache memory: 14.51 GiB
+(EngineCore pid=92) INFO 10-08 15:38:44 [kv_cache_utils.py:2032] GPU KV cache size: 68,913 tokens, Maximum concurrency for 4,096 tokens per request: 16.82x
+statefulset.apps/vllm scaled
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+B-default             254   0.109    116.4      1847       3160   -0%/+0%/+0%            MOE_BACKEND=triton
+X-triton-tuned-v1-r2     192   0.108    116.4      1949       3339   +0%/+6%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v1     218   0.109    116.4      1945       3352   -0%/+5%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2-r2     231   0.107    116.4      1954       3362   +1%/+6%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton-tuned-v2     197   0.108    116.4      1772       3347   +1%/-4%/+6%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true

@@ -27,6 +27,5 @@ CLAUDE.md
 !gemma4-kernels/kernel-bench/results/
 !gemma4-kernels/kernel-bench/results/**
 gemma4-kernels/kernel-bench/results/routing.npy*
-gemma4-kernels/kernel-bench/results/miniprobe/
 gemma4-kernels/k8s/params.env
 gemma4-kernels/k8s/01-statefulset.yaml
