@@ -1,0 +1,7 @@
+(APIServer pid=1) INFO 10-08 11:21:03 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 11:21:23 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=92) INFO 10-08 11:21:23 [fp8.py:359] Using HUMMING Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=92) INFO 10-08 11:21:23 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=92) INFO 10-08 11:22:48 [model_runner.py:404] Model loading took 26.57 GiB memory and 86.291183 seconds
+(EngineCore pid=92) INFO 10-08 11:23:53 [gpu_worker.py:625] Available KV cache memory: 11.59 GiB
+(EngineCore pid=92) INFO 10-08 11:23:54 [kv_cache_utils.py:2032] GPU KV cache size: 55,027 tokens, Maximum concurrency for 4,096 tokens per request: 13.43x

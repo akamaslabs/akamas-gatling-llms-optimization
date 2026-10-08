@@ -1,0 +1,1 @@
+{"name":"K-fp8-flashinfer","overrides":"KV_CACHE_DTYPE=fp8 ATTENTION_BACKEND=FLASHINFER","started":false,"apply_exit":4,"startup_s":421}

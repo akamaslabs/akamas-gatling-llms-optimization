@@ -1,0 +1,162 @@
+kind: study
+name: 2-Gemma4-L40S-Kernels
+description: >-
+  Study 2 of akamas-gatling-llms-optimization: kernel backends of
+  RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic (MoE, 26B total / 4B active) on one NVIDIA L40S,
+  vLLM 0.29.0, the model and GPU of vllm-benchmark study 30, with studies 27/29's kernel
+  approach: MoE / linear / attention backends, tuned fused-MoE configs, KV dtype and the batch
+  knobs. Goal: total tokens/s under TTFT p95 <= 1500 ms and ITL p95 <= 300 ms (150 s p95,
+  :max). Load: Gatling Enterprise open-loop ramp on ShareGPT (Poisson arrivals), stopped by an
+  in-generator watchdog past the SLA. Steps: baseline twice (vLLM's own choices), 5 RANDOM
+  experiments, 60 AKAMAS experiments; no hand-picked presets. Needs vLLM pack 1.13.0.
+# Design and the kernel probe behind every domain: ../README.md and kernel-bench/results/.
+# Baseline values are written out in full, every parameter (study 27: a step with
+# doNotRenderParameters never reaches the optimizer engine).
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+workflow: 2-Gemma4-L40S-Kernels-Workflow
+
+# Study 30's goal, constraints and windowing, so the two studies compare: they differ in the
+# load generator and the parameters.
+goal:
+  objective: maximize
+  function:
+    formula: vllm.total_token_throughput
+    unit: tokens per second
+  constraints:
+    absolute:
+      - name: TTFT P95 over 150 s
+        formula: vllm.time_to_first_token_p95:max <= 1500
+      - name: ITL P95 over 150 s
+        formula: vllm.inter_token_latency_p95:max <= 300
+
+# The valid 6-sample (3 min) window with the most tokens/s: the end of the ramp before the SLA
+# breaks. maxStdDev 300000000 disables the stability filter. `when` nested under `stability`,
+# as studies 27-30 (accepted by the 3.7 and 4.1 servers).
+windowing:
+  type: stability
+  stability:
+    metric: vllm.total_token_throughput
+    width: 6
+    maxStdDev: 300000000
+    when:
+      metric: vllm.total_token_throughput
+      is: max
+
+numberOfTrials: 1
+
+# Kernel probe of 2026-10-08 (kernel-bench/results/summary.txt), against vLLM's own choices:
+#   MoE: auto (= TRITON), marlin, humming start; cutlass and flashinfer_cutlass do not
+#     ("kernel does not support current device"). triton is not listed: it is auto.
+#   linear: auto (= Cutlass), torch, marlin, humming start, within +-1 % on ShareGPT.
+#   attention: auto (= TRITON_ATTN, forced by Gemma4Config on SM 8.9), FLASHINFER (-5 % on
+#     ShareGPT, 17 % less KV cache). FLASH_ATTN does not start (head dim 512).
+#   kv fp8: +13 % on ShareGPT; FLASHINFER + fp8 does not start on SM 8.9.
+#   tuned fused-MoE configs: see README "MoE tuning" (applies to the Triton experts only).
+parametersSelection:
+  # Study 30's domains for the batch knobs (study 27's per-role set, one role here).
+  - name: vllm.gpu_memory_utilization
+    domain: [0.80, 0.94]
+  - name: vllm.max_num_seqs
+    domain: [16, 512]
+  - name: vllm.max_num_batched_tokens
+    domain: [512, 16384]
+  - name: vllm.kv_cache_dtype
+    categories: [auto, fp8]
+  - name: vllm.moe_backend
+    categories: [auto, marlin, humming]
+  - name: vllm.tuned_kernel_configs
+    categories: ["true", "false"]
+  - name: vllm.linear_backend
+    categories: [auto, torch, marlin, humming]
+  - name: vllm.attention_backend
+    categories: [auto, FLASHINFER]
+
+# Quoted values / || are evaluated as a boolean (rejection sampling).
+parameterConstraints:
+  # vLLM 0.29.0 raises ValueError when max_num_batched_tokens < max_num_seqs.
+  - name: max_num_batched_tokens must be at least max_num_seqs
+    formula: vllm.max_num_batched_tokens >= vllm.max_num_seqs
+  # The tuned configs are read by the Triton experts only (auto): no duplicate points.
+  - name: tuned MoE configs only with the Triton experts
+    formula: vllm.tuned_kernel_configs == "false" || vllm.moe_backend == "auto"
+  # Kernel probe: FLASHINFER with an fp8 KV cache does not start for this model on SM 8.9.
+  - name: FLASHINFER only with a bf16 KV cache
+    formula: vllm.attention_backend != "FLASHINFER" || vllm.kv_cache_dtype == "auto"
+
+# Study 30's KPIs, with GPU utilisation in place of the MTP acceptance (MTP is off here).
+kpis:
+  - name: Throughput totale
+    formula: vllm.total_token_throughput
+    direction: maximize
+  - name: Richieste completate
+    formula: vllm.request_success_rate
+    direction: maximize
+  - name: TTFT P95 150s
+    formula: vllm.time_to_first_token_p95
+    direction: minimize
+    aggregation: max
+  - name: ITL P95 150s
+    formula: vllm.inter_token_latency_p95
+    direction: minimize
+    aggregation: max
+  - name: KV cache in uso
+    formula: vllm.kv_cache_usage_avg
+    direction: minimize
+  - name: Preemption
+    formula: vllm.preemption_rate
+    direction: minimize
+  - name: Richieste in esecuzione
+    formula: vllm.num_requests_running
+    direction: maximize
+    aggregation: max
+  - name: Utilizzo GPU
+    formula: gpu0.gpu_util
+    direction: maximize
+
+steps:
+  # vLLM 0.29.0's own choices (auto = TRITON MoE with its default config, Cutlass linear,
+  # TRITON_ATTN), study 30's baseline values, every parameter written out.
+  - name: baseline
+    type: baseline
+    numberOfTrials: 1
+    values:
+      vllm.gpu_memory_utilization: 0.92
+      vllm.max_num_seqs: 256
+      vllm.max_num_batched_tokens: 2048
+      vllm.kv_cache_dtype: auto
+      vllm.moe_backend: auto
+      vllm.tuned_kernel_configs: "false"
+      vllm.linear_backend: auto
+      vllm.attention_backend: auto
+
+  # The same again: the noise of this load (Gatling, Poisson arrivals) on this node.
+  - name: baseline repeat
+    type: preset
+    values:
+      vllm.gpu_memory_utilization: 0.92
+      vllm.max_num_seqs: 256
+      vllm.max_num_batched_tokens: 2048
+      vllm.kv_cache_dtype: auto
+      vllm.moe_backend: auto
+      vllm.tuned_kernel_configs: "false"
+      vllm.linear_backend: auto
+      vllm.attention_backend: auto
+
+  # Initialisation: 5 random configurations, no hand-picked presets (decided with the user,
+  # 2026-10-08: the study is a demo of Akamas finding the configuration, so nothing in it may
+  # come from the kernel probe's winners). RANDOM, not the AKAMAS step's own initialisation:
+  # that one is Sobol from offset 0, which aliased two parameters over all 10 initial points
+  # in vllm-benchmark study 13. RANDOM respects parameterConstraints (rejection sampling).
+  - name: random init
+    type: optimize
+    optimizer: RANDOM
+    numberOfExperiments: 5
+    maxFailedExperiments: 5
+
+  # The AKAMAS optimizer starts from the baselines and the 5 random experiments.
+  - name: optimize
+    type: optimize
+    optimizer: AKAMAS
+    numberOfInitExperiments: 0
+    numberOfExperiments: 60
+    maxFailedExperiments: 20

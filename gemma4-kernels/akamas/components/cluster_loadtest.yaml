@@ -1,0 +1,10 @@
+kind: component
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+name: cluster_loadtest
+description: >-
+  The CPU node running the Gatling load generator, the control plane and the monitoring stack
+  (node group system, label node-role=system, m6i.2xlarge).
+componentType: Kubernetes Cluster
+properties:
+  prometheus:
+    noderole: system

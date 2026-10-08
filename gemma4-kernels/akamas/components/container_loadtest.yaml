@@ -1,0 +1,11 @@
+kind: component
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+name: container_loadtest
+description: >-
+  The Gatling load generator's container (Jobs gatling-load-generator-*, namespace
+  llm-benchmark, created by the Gatling Enterprise control plane for each run), so a starved
+  client shows up as such instead of as a slower server.
+componentType: Kubernetes Container
+properties:
+  prometheus:
+    pod: ^gatling-load-generator-.*

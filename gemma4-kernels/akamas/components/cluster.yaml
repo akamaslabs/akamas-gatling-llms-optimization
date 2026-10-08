@@ -1,0 +1,10 @@
+kind: component
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+name: cluster
+description: >-
+  The GPU node (label node-role=llm-serving, g6e.xlarge, 4 vCPU / 32 GiB; the g5 node group
+  shares the label and stays at 0) for node-level CPU, memory and pressure counters.
+componentType: Kubernetes Cluster
+properties:
+  prometheus:
+    noderole: llm-serving

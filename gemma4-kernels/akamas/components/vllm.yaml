@@ -1,0 +1,12 @@
+kind: component
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+name: vllm
+description: >-
+  The vLLM server (StatefulSet vllm, pod vllm-0, namespace llm-serving of vllm-bench-gatling),
+  RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic served as gemma4-26b-l40s. Carries every tuned
+  parameter and the goal, constraint and windowing metrics.
+componentType: vLLM
+properties:
+  prometheus:
+    pod: ^vllm-0$
+    model: gemma4-26b-l40s

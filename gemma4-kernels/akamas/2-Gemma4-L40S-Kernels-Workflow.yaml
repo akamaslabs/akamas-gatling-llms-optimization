@@ -1,0 +1,56 @@
+kind: workflow
+name: 2-Gemma4-L40S-Kernels-Workflow
+# Study 2 (gemma4-kernels/). The pipeline of vllm-benchmark study 30 (Write config -> Apply
+# config -> RunTest), with this repo's scripts and the load on Gatling Enterprise:
+#   - Apply config: gemma4-kernels/k8s/apply_config.sh, kubectl context `gatling` (toolbox's
+#     alias of vllm-bench-gatling; the default context is the shared vllm-bench cluster);
+#   - RunTest: k8s/run_test_enterprise.sh starts simulation vllmOpenLoopRamp (warm-up 60 s,
+#     Poisson ramp 0 -> 40 req/s over 6000 s, in-generator watchdog at 2x the SLA for 120 s)
+#     on the in-cluster private location and blocks until the run ends.
+# Akamas 4.1 conventions (study 30): the toolbox's own key /home/akamas/.ssh/id_rsa, which must
+# exist on the toolbox when `akamas create workflow` runs, so run it from the toolbox.
+tasks:
+  # The parameters go to an env file, not a manifest: render_statefulset.sh validates them
+  # and writes the vLLM flags. ignoreUnsubstitutedTokens false: every token must resolve.
+  - name: Write config
+    operator: FileConfigurator
+    arguments:
+      ignoreUnsubstitutedTokens: false
+      source:
+        hostname: toolbox
+        username: akamas
+        key: /home/akamas/.ssh/id_rsa
+        path: /work/akamas-gatling-llms-optimization/gemma4-kernels/k8s/params.env.template
+      target:
+        hostname: toolbox
+        username: akamas
+        key: /home/akamas/.ssh/id_rsa
+        path: /work/akamas-gatling-llms-optimization/gemma4-kernels/k8s/params.env
+  - name: Apply config
+    operator: Executor
+    arguments:
+      retries: 0
+      # apply_config.sh's rollout wait (2400 s: a replaced node pulls the image and downloads
+      # the 27 GiB model) plus warm-up and log dump.
+      timeout: 45m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /home/akamas/.ssh/id_rsa
+      command: bash /work/akamas-gatling-llms-optimization/gemma4-kernels/k8s/apply_config.sh
+  - name: RunTest
+    operator: Executor
+    arguments:
+      retries: 0
+      # The simulation's own maxDuration (60 s + 6000 s + 600 s) plus the Enterprise run's
+      # start-up (load generator Job scheduling, image pull) and report upload.
+      timeout: 130m
+      host:
+        hostname: toolbox
+        username: akamas
+        key: /home/akamas/.ssh/id_rsa
+      # /work/.gatling-env (PLAN.md A6) holds the API token and study 1's simulation id;
+      # GATLING_SIMULATION_ID_STUDY2 (same file) is vllmOpenLoopRamp's id, printed by
+      # k8s/deploy_enterprise.sh. Sourced explicitly: Akamas' non-interactive SSH session
+      # reads neither ~/.bashrc nor ~/.profile.
+      command: bash -c 'set -a; . /work/.gatling-env; set +a; GATLING_SIMULATION_ID="${GATLING_SIMULATION_ID_STUDY2:?add GATLING_SIMULATION_ID_STUDY2 to /work/.gatling-env}" bash /work/akamas-gatling-llms-optimization/k8s/run_test_enterprise.sh'

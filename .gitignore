@@ -19,3 +19,14 @@ CLAUDE.md
 
 # JetBrains IDE settings — local, never shared.
 .idea/
+
+# Study 2 (gemma4-kernels/): the kernel probe and tuning results are the evidence behind the
+# study's domains, so they are kept despite results/ and *.log above. Not the 40 MB routing
+# sample (regenerate with kernel-bench/capture_routing.py), nor the files the Akamas workflow
+# renders on the toolbox.
+!gemma4-kernels/kernel-bench/results/
+!gemma4-kernels/kernel-bench/results/**
+gemma4-kernels/kernel-bench/results/routing.npy*
+gemma4-kernels/kernel-bench/results/miniprobe/
+gemma4-kernels/k8s/params.env
+gemma4-kernels/k8s/01-statefulset.yaml

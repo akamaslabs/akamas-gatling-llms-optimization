@@ -1,0 +1,139 @@
+# vLLM serving for study 2 (Gemma 4 26B-A4B FP8 on one L40S, kernels). Rendered by
+# render_statefulset.sh (called by apply_config.sh), NOT by the Akamas FileConfigurator. Not
+# valid YAML until rendered: the TUNED_ARGS line becomes one "- --flag" item per tuned
+# parameter, the TUNED_ENV line the tuned-config env (or nothing).
+#
+# Ported from vllm-benchmark's studies/30-l40s-gemma4-26b-tps/k8s/01-statefulset_template.yaml
+# (same model, same flags, same pod sizing), for the vllm-bench-gatling cluster:
+#   - namespace llm-serving (the Service `vllm` and its ServiceMonitor already select app: vllm);
+#   - nodeSelector gpu: l40s (node group llm-serving-l40s, g6e.xlarge, infra/eks/cluster.yaml);
+#   - the fused-MoE tuned configs (ConfigMap moe-tuned-configs, ../kernel-bench/tune_moe.py),
+#     read by vLLM only when VLLM_TUNED_CONFIG_FOLDER is set (TUNED_MOE_CONFIGS=true).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vllm
+  namespace: llm-serving
+spec:
+  serviceName: vllm-headless
+  replicas: 1
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      # Kubernetes would otherwise inject VLLM_PORT=tcp://... from the Service, which
+      # collides with vLLM's own VLLM_PORT variable and crashes it at startup.
+      enableServiceLinks: false
+      nodeSelector:
+        gpu: l40s
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: vllm
+          image: vllm/vllm-openai:v0.29.0
+          args:
+            # bf16 (48.07 GiB) does not fit the L40S; RedHat's FP8-dynamic checkpoint (26.67 GiB):
+            # per-channel FP8 weights, per-token dynamic activations (study 30 README).
+            - "--model=RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic"
+            # MUST match "model" in src/vllmOpenLoopRamp.gatling.ts and .gatling/package.conf.
+            - "--served-model-name=gemma4-26b-l40s"
+            - "--port=8000"
+            - "--host=0.0.0.0"
+            # Text-only traffic: the vision tower is not profiled, its memory goes to the KV.
+            - "--language-model-only"
+            - "--no-enable-prefix-caching"
+            - "--max-model-len=4096"
+            - "--default-chat-template-kwargs"
+            - '{"enable_thinking": false}'
+            # --- Tuned (parametersSelection), one item per parameter ---
+            - "--gpu-memory-utilization=0.92"
+            - "--max-num-seqs=256"
+            - "--max-num-batched-tokens=2048"
+            - "--kv-cache-dtype=auto"
+            - "--performance-mode=balanced"
+            - "--optimization-level=2"
+            - "--no-enforce-eager"
+            - "--scheduling-policy=fcfs"
+            - "--async-scheduling"
+            - "--max-cudagraph-capture-size=512"
+            - "--block-size=16"
+            - "--moe-backend=flashinfer_cutlass"
+          env:
+            - name: HF_HOME
+              value: /hf-cache
+            # torch.compile and Triton caches on the node, so a restart with an already seen
+            # configuration skips most of the compilation (vLLM keys its cache by a hash of
+            # the configuration; a new backend combination still compiles from scratch).
+            - name: VLLM_CACHE_ROOT
+              value: /vllm-cache
+            - name: TRITON_CACHE_DIR
+              value: /vllm-cache/triton
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          # Study 30's sizing for g6e.xlarge (3920m CPU / 29.9 GiB allocatable): CPU request
+          # only, no limit (no CFS throttling of the busy-looping engine core); memory
+          # request == limit, the ~27 GB of model files go through the reclaimable page cache.
+          resources:
+            requests:
+              nvidia.com/gpu: "1"
+              cpu: 3500m
+              memory: 28Gi
+            limits:
+              nvidia.com/gpu: "1"
+              memory: 28Gi
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /hf-cache
+            - name: vllm-cache
+              mountPath: /vllm-cache
+            - name: shm
+              mountPath: /dev/shm
+            - name: moe-tuned-configs
+              mountPath: /moe-tuned-configs
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 180   # 30 min: cold image pull (~10 GB) + 27 GiB download + compile
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 3
+      volumes:
+        # hostPath: a node scaled up from 0 starts empty, the first start downloads the model.
+        - name: hf-cache
+          hostPath:
+            path: /var/lib/hf-cache-study2
+            type: DirectoryOrCreate
+        - name: vllm-cache
+          hostPath:
+            path: /var/lib/vllm-cache-study2
+            type: DirectoryOrCreate
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        # Optional: absent until apply_config.sh creates it from ../kernel-bench/tuned-configs/.
+        # A ConfigMap key cannot hold '=' or ',', which vLLM's file name does: the key is
+        # plain and `items` maps it back to the name vLLM looks up (fused_moe.get_config_file_name).
+        - name: moe-tuned-configs
+          configMap:
+            name: moe-tuned-configs
+            optional: true
+            items:
+              - key: moe-e128-n704-l40s-fp8.json
+                path: "E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json"

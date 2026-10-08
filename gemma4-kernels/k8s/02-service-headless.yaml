@@ -1,0 +1,18 @@
+# Governing Service of the vLLM StatefulSet (stable pod name vllm-0). Labelled differently
+# from k8s/02-service.yaml's `vllm` Service, which the ServiceMonitor scrapes and the load
+# generator targets, so the pod is not scraped twice.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-headless
+  namespace: llm-serving
+  labels:
+    app: vllm-headless
+spec:
+  clusterIP: None
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

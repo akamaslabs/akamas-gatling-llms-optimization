@@ -1,0 +1,50 @@
+# One-off pod for tune_moe.py on the L40S (study 2). Needs the GPU to itself: scale the vLLM
+# StatefulSet to 0 first. The script and the routing sample come from ConfigMap/cp, the
+# result is read back with kubectl cp from /out. See README "MoE tuning".
+#   kubectl -n llm-serving create configmap moe-tune-script --from-file=kernel-bench/tune_moe.py
+#   kubectl apply -f kernel-bench/tune-pod.yaml
+#   kubectl -n llm-serving cp kernel-bench/results/routing.npy moe-tune:/out/routing.npy
+#   kubectl -n llm-serving logs -f moe-tune          # TUNING-DONE at the end
+apiVersion: v1
+kind: Pod
+metadata:
+  name: moe-tune
+  namespace: llm-serving
+  labels:
+    app: moe-tune
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    gpu: l40s
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  containers:
+    - name: tune
+      image: vllm/vllm-openai:v0.29.0   # same image, Triton and kernel as the serving pod
+      command: ["bash", "-c"]
+      # Waits for routing.npy (copied in after start), then tunes with the real routing.
+      args:
+        - until [ -f /out/routing.npy ]; do sleep 5; done;
+          python3 -u /tune/tune_moe.py --save-path /out --routing /out/routing.npy ${TUNE_ARGS}
+          && echo TUNING-DONE; sleep infinity
+      env:
+        - name: TUNE_ARGS
+          value: ""   # e.g. "--batch-sizes 16,512 --max-configs 20" for a smoke run
+        - name: TRITON_CACHE_DIR
+          value: /vllm-cache/triton
+      resources:
+        requests: {nvidia.com/gpu: "1", cpu: "3", memory: 16Gi}
+        limits: {nvidia.com/gpu: "1", memory: 24Gi}
+      volumeMounts:
+        - {name: script, mountPath: /tune, readOnly: true}
+        - {name: out, mountPath: /out}
+        - {name: vllm-cache, mountPath: /vllm-cache}
+  volumes:
+    - name: script
+      configMap: {name: moe-tune-script}
+    - name: out
+      emptyDir: {}
+    - name: vllm-cache
+      hostPath: {path: /var/lib/vllm-cache-study2, type: DirectoryOrCreate}

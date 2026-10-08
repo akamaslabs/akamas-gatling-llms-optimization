@@ -1,0 +1,10 @@
+kind: component
+system: vLLM_Benchmark_2_Gemma4_L40S_Kernels_Gatling
+name: container
+description: >-
+  The vLLM container of pod vllm-0: CPU and memory used against the fixed 3500m CPU request
+  (no limit) and 28 GiB on the 4-vCPU g6e.xlarge, where the host CPU could bind. Not tuned.
+componentType: Kubernetes Container
+properties:
+  prometheus:
+    pod: ^vllm-0$

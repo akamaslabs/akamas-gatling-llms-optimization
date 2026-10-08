@@ -1,0 +1,14 @@
+name              start_s    pf_s  tok/s@1  tok/s@64 sgpt tok/s   vs default pf/@64/sgpt overrides
+A-flashinfer          312   0.097     95.8      1752       3006   +12%/-5%/-5%           ATTENTION_BACKEND=FLASHINFER
+B-default             438   0.110    116.5      1842       3181   -0%/+0%/+0%            -
+K-fp8-flashinfer  did not start (apply exit 4)  KV_CACHE_DTYPE=fp8 ATTENTION_BACKEND=FLASHINFER
+K-fp8                 313   0.100    115.8      1940       3592   +9%/+5%/+13%           KV_CACHE_DTYPE=fp8
+L-humming             288   0.109    123.3      1935       3190   +1%/+5%/+0%            LINEAR_BACKEND=humming
+L-marlin              244   0.111    122.3      1887       3157   -1%/+2%/-1%            LINEAR_BACKEND=marlin
+L-torch               296   0.104    118.9      1930       3188   +5%/+5%/+0%            LINEAR_BACKEND=torch
+X-cutlass         did not start (apply exit 4)  MOE_BACKEND=cutlass
+X-fi-cutlass      did not start (apply exit 4)  MOE_BACKEND=flashinfer_cutlass
+X-humming             257   0.118    115.8      1886       3182   -8%/+2%/+0%            MOE_BACKEND=humming
+X-marlin              264   0.120    118.3      1980       3397   -9%/+7%/+7%            MOE_BACKEND=marlin
+X-triton-tuned        241   0.109    116.5      1678       3317   +0%/-9%/+4%            MOE_BACKEND=triton TUNED_MOE_CONFIGS=true
+X-triton              316   0.109    116.4      1840       3179   +1%/-0%/-0%            MOE_BACKEND=triton

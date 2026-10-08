@@ -1,0 +1,8 @@
+(APIServer pid=1) INFO 10-08 10:59:49 [config.py:252] Gemma4 model has heterogeneous head dimensions {'sliding_attention': 256, 'full_attention': 512}. FA4 not available, forcing TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 11:00:09 [cuda.py:432] Using AttentionBackendEnum.TRITON_ATTN backend.
+(EngineCore pid=93) INFO 10-08 11:00:09 [fp8.py:359] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=93) INFO 10-08 11:00:09 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=93) INFO 10-08 11:02:43 [model_runner.py:404] Model loading took 24.72 GiB memory and 154.459776 seconds
+(EngineCore pid=93) INFO 10-08 11:03:35 [gpu_worker.py:625] Available KV cache memory: 13.47 GiB
+(EngineCore pid=93) INFO 10-08 11:03:35 [kv_cache_utils.py:2032] GPU KV cache size: 63,988 tokens, Maximum concurrency for 4,096 tokens per request: 15.62x
+(EngineCore pid=93) WARNING 10-08 11:03:27 [fused_moe.py:1167] Using default MoE config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json

@@ -1,0 +1,7 @@
+(EngineCore pid=92) INFO 10-08 11:54:42 [cuda.py:432] Using AttentionBackendEnum.FLASHINFER backend.
+(EngineCore pid=92) INFO 10-08 11:54:42 [fp8.py:438] Using TRITON Fp8 MoE backend out of potential backends: ['AITER', 'FLASHINFER_TRTLLM', 'FLASHINFER_CUTLASS', 'DEEPGEMM', 'VLLM_CUTLASS', 'TRITON', 'MARLIN', 'HUMMING', 'BATCHED_DEEPGEMM', 'BATCHED_VLLM_CUTLASS', 'BATCHED_TRITON', 'XPU', 'CPU', 'HPC'].
+(EngineCore pid=92) INFO 10-08 11:54:42 [__init__.py:726] Selected CutlassFP8ScaledMMLinearKernel for CompressedTensorsW8A8Fp8
+(EngineCore pid=92) INFO 10-08 11:56:03 [model_runner.py:404] Model loading took 24.72 GiB memory and 81.110971 seconds
+(EngineCore pid=92) INFO 10-08 11:58:08 [gpu_worker.py:625] Available KV cache memory: 11.16 GiB
+(EngineCore pid=92) INFO 10-08 11:58:08 [kv_cache_utils.py:2032] GPU KV cache size: 52,978 tokens, Maximum concurrency for 4,096 tokens per request: 12.93x
+(EngineCore pid=92) WARNING 10-08 11:56:48 [fused_moe.py:1167] Using default MoE config. Performance might be sub-optimal! Config file not found at /usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_moe/configs/E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json
