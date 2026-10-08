@@ -126,3 +126,28 @@ managedNodeGroups:
       - key: nvidia.com/gpu
         value: "present"
         effect: NoSchedule
+
+  # Study 2 (Gemma 4 26B-A4B FP8, kernels): one NVIDIA L40S (48 GB). The g5's A10G (24 GB)
+  # cannot hold the 26.7 GiB FP8 checkpoint. g6e.xlarge is the size vllm-benchmark's
+  # study 30 runs on (same model, same GPU), so the two studies differ only in the load
+  # generator and the parameters. 4 vCPU: study 30's host-CPU risk applies here too.
+  #
+  # Same `node-role: llm-serving` as the g5 group, so dcgm-exporter (k8s/monitoring/
+  # dcgm-exporter-values.yaml, one nodeSelector) covers it unchanged; `gpu: l40s` is what
+  # study 2's manifests select on, so a scaled-up g5 can never receive them. Keep the
+  # g5 group at 0 while this one is up.
+  - name: llm-serving-l40s
+    instanceType: g6e.xlarge
+    availabilityZones: ["us-east-2c"]
+    desiredCapacity: 0
+    minSize: 0
+    maxSize: 1
+    volumeSize: 200
+    amiFamily: AmazonLinux2023
+    labels:
+      node-role: llm-serving
+      gpu: l40s
+    taints:
+      - key: nvidia.com/gpu
+        value: "present"
+        effect: NoSchedule

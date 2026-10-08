@@ -55,6 +55,12 @@ prometheusOperator:
 kube-state-metrics:
   nodeSelector:
     node-role: system
+  # Export the node labels as kube_node_labels{label_node_role, label_gpu}. kube-state-metrics
+  # exports no Kubernetes label by default, and every per-node Akamas query (Kubernetes
+  # Cluster component, $NODEROLE$) and study 2's active_gpus join on them; without this they
+  # return nothing (found 2026-10-08, preparing study 2).
+  metricLabelsAllowlist:
+    - nodes=[node-role,gpu]
 
 # node-exporter must run on GPU nodes too to capture host-level metrics.
 # The toleration lets it schedule despite the nvidia.com/gpu taint.
