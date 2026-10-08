@@ -8,8 +8,9 @@ base64 .npy, shape (tokens - 1, layers, top_k), prompt and generated tokens alik
 
 Why: the fused-MoE kernel's best tile size depends on how many tokens land on each expert,
 and the router is skewed (hot experts). vLLM's benchmark_moe draws random gating, i.e. near
-uniform routing, which made the first tuning pick BLOCK_SIZE_M=16 everywhere and lose 9 % on
-real decode (README, "MoE tuning").
+uniform routing: tokens per expert in the benchmark differ from serving (at M=64 the most
+loaded expert gets ~10 tokens with random gating, ~21 with the real router). Whether this
+changes the end-to-end result is open: README, "MoE tuning".
 """
 import base64
 import io

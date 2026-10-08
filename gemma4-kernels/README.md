@@ -48,6 +48,37 @@ Decided with the user on 2026-10-08:
    configuration, so nothing in it comes from the probe's winners; the probe only decides
    which backends can start.
 
+## MoE tuning (2026-10-08)
+
+The fused-MoE Triton kernel (`--moe-backend` auto/triton) has one launch config per M (tokens
+per step) per shape; vLLM 0.29.0 has none for Gemma 4's (E=128, N=704) on L40S, so it uses
+its default. Two tunings, both with `kernel-bench/tune_moe.py` (vLLM's search space, 1920
+configs, two-stage: screen at 2 iterations, best 20 re-measured at 20), M = 1 ... 2048:
+
+- **v1**, random gating as vLLM's `benchmark_moe.py` (`tuned-configs-v1/`, `results/tuning.log`):
+  -7 to -10 % kernel time against the default from M=4 to 2048, ~1 h.
+- **v2**, the model's real routing (`tuned-configs-v2/`, `results/tuning-v2.log`): 400 ShareGPT
+  requests served with `--enable-return-routed-experts` (`capture_routing.py`, 167k tokens x 30
+  layers x top-8), each benchmark iteration on one random layer and M real token rows; no
+  pruning. -7 to -10 % kernel time against the default, 2 h 37 min (compilation on 4 vCPUs).
+
+The router is skewed (the 8 most used experts take 22 % of a layer's slots, 6.25 % if
+uniform; at M=64 the most loaded expert gets ~21 tokens against ~10 with random gating).
+
+End to end (`results/miniprobe/`, Triton experts, everything else default):
+
+| | decode, 64 requests (tok/s) | ShareGPT, 128 workers (total tok/s) |
+|---|---|---|
+| default config | 1847 | 3160 |
+| v1 | 1945 / 1949 | 3352 / 3339 |
+| v2 | 1772 / 1954 | 3347 / 3362 |
+
+Both tunings gain **~+6 % on ShareGPT** (4 runs of 4) and ~+5 % on the 64-request decode, where
+a start now and then comes out ~9 % low (v1 this morning, 1678; v2's first run). v1 and v2 are
+equivalent end to end. **The study uses v2** (`kernel-bench/tuned-configs/`). A -9 % decode
+result of v1 earlier in the day was first read as an effect of the uniform routing; it did
+not reproduce.
+
 ## Layout
 
 ```

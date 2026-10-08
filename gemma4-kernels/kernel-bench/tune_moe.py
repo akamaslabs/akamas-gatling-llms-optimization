@@ -20,8 +20,10 @@ through VLLM_TUNED_CONFIG_FOLDER (see ../k8s/01-statefulset_template.yaml).
 
 Routing (--routing, tuning v2): the kernel's best tile size depends on how many tokens land on
 each expert, and the router is skewed. Random gating (vLLM's benchmark, and this script
-without --routing) is near uniform: v1 picked BLOCK_SIZE_M=16 up to M=256 and lost 9 % on a
-real 64-request decode, while gaining 4 % on ShareGPT (README, "MoE tuning"). With --routing
+without --routing) is near uniform, so the benchmark sees other tokens-per-expert than serving
+does (v1 picked BLOCK_SIZE_M=16 up to M=256). End to end, v1 and v2 both gain ~4-6 % on
+ShareGPT; a -9 % on a 64-request decode first seen with v1 did not reproduce (README, "MoE
+tuning"). With --routing
 each iteration takes one layer at random and M token rows at random from the experts the
 model really picked on ShareGPT (capture_routing.py), and no BLOCK_SIZE_M is pruned.
 

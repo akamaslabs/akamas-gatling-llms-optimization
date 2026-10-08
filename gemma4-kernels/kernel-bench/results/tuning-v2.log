@@ -1,0 +1,18 @@
+routing: (167168, 30, 8) real token rows (layers x top_k), no BLOCK_SIZE_M pruning
+device NVIDIA L40S, 1920 configs x 15 M -> E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json
+M=1: {'BLOCK_SIZE_M': 16, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 128, 'GROUP_SIZE_M': 1, 'num_warps': 4, 'num_stages': 4} 28.0 us, default 27.5 us (+1.7 %) (1554 s)
+M=2: {'BLOCK_SIZE_M': 16, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 2} 64.0 us, default 66.3 us (-3.5 %) (1603 s)
+M=4: {'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 5} 224.7 us, default 243.3 us (-7.7 %) (110 s)
+M=8: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 32, 'num_warps': 4, 'num_stages': 5} 376.3 us, default 419.8 us (-10.4 %) (1824 s)
+M=16: {'BLOCK_SIZE_M': 16, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 64, 'num_warps': 4, 'num_stages': 5} 564.7 us, default 615.2 us (-8.2 %) (240 s)
+M=24: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 5} 679.4 us, default 744.0 us (-8.7 %) (295 s)
+M=32: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 64, 'num_warps': 8, 'num_stages': 5} 742.0 us, default 812.3 us (-8.6 %) (304 s)
+M=48: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 32, 'num_warps': 4, 'num_stages': 5} 845.9 us, default 933.2 us (-9.4 %) (364 s)
+M=64: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 5} 916.4 us, default 1011.0 us (-9.4 %) (381 s)
+M=96: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 5} 966.3 us, default 1069.4 us (-9.6 %) (416 s)
+M=128: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 5} 996.4 us, default 1106.1 us (-9.9 %) (393 s)
+M=256: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 5} 1091.1 us, default 1209.5 us (-9.8 %) (418 s)
+M=512: {'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 16, 'num_warps': 4, 'num_stages': 4} 1175.3 us, default 1296.8 us (-9.4 %) (426 s)
+M=1024: {'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 32, 'num_warps': 8, 'num_stages': 4} 1329.4 us, default 1442.9 us (-7.9 %) (488 s)
+M=2048: {'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 256, 'GROUP_SIZE_M': 32, 'num_warps': 4, 'num_stages': 3} 1650.0 us, default 1770.4 us (-6.8 %) (595 s)
+done in 9411 s: /out/E=128,N=704,device_name=NVIDIA_L40S,dtype=fp8_w8a8.json
